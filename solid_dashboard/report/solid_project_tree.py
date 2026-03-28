@@ -43,3 +43,5 @@ if __name__ == "__main__":
         print_tree(tools_dir, f)
         
     print(f"Project tree for '{tools_dir}' has been saved to: {output_file}")
+
+# КОМАНДА ДЛЯ ЗАПУСКА СКРИПТА: python tools/solid_verifier/solid_dashboard/report/solid_project_tree.py
