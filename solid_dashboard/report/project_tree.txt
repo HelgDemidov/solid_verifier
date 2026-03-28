@@ -1,0 +1,44 @@
+tools/
+└── solid_verifier
+    ├── build
+    │   └── bdist.win-amd64
+    ├── solid_dashboard
+    │   ├── adapters
+    │   │   ├── __init__.py
+    │   │   ├── cohesion_adapter.py
+    │   │   ├── cohesion_debug.log
+    │   │   ├── import_graph_adapter.py
+    │   │   ├── import_linter_adapter.py
+    │   │   ├── llm_adapter.py
+    │   │   ├── pyan3_adapter.py
+    │   │   └── radon_adapter.py
+    │   ├── interfaces
+    │   │   ├── __init__.py
+    │   │   └── analyzer.py
+    │   ├── report
+    │   │   ├── templates
+    │   │   │   └── report.html.j2
+    │   │   ├── differ.py
+    │   │   ├── generator.py
+    │   │   ├── project_tree.txt
+    │   │   ├── solid_project_tree.py
+    │   │   └── solid_report.log
+    │   ├── __init__.py
+    │   ├── __main__.py
+    │   ├── config.py
+    │   ├── pipeline.py
+    │   └── schema.py
+    ├── solid_dashboard.egg-info
+    │   ├── PKG-INFO
+    │   ├── SOURCES.txt
+    │   ├── dependency_links.txt
+    │   ├── entry_points.txt
+    │   ├── requires.txt
+    │   └── top_level.txt
+    ├── tests
+    │   └── fixtures
+    │       └── sample_project
+    ├── README.md
+    ├── README.ru.md
+    ├── pyproject.toml
+    └── requirements.txt
