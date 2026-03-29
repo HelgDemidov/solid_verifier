@@ -34,3 +34,10 @@ __all__ = [
     "CandidateType",
     "SeverityLevel",
 ]
+
+from .ast_parser import build_project_map
+
+__all__ = [
+    # ... существующие ...
+    "build_project_map",
+]
