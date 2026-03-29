@@ -201,6 +201,7 @@ python run_solid_dashboard.py
 - [`import-linter`](https://pypi.org/project/import-linter/) — обеспечение соблюдения архитектурных контрактов через CLI.
 - [`pyan3`](https://pypi.org/project/pyan3/) — построение графа вызовов и анализ мертвого кода.
 - [`jinja2`](https://pypi.org/project/Jinja2/) — генерация HTML-отчетов (в планах).
+- [`httpx`] (>=0.24.0): Синхронный HTTP-клиент с гранулярной настройкой таймаутов (connect/read/write), используемый LLM-адаптером для надежного взаимодействия с API LLM-провайдеров (OpenAI, Ollama).
 
 Все зависимости жестко зафиксированы в `requirements.txt` на стабильных версиях, совместимых с текущей средой выполнения Python.
 

@@ -26,6 +26,9 @@ dependencies = [
     # Block 3 — core & reporting
     "pydantic>=2.12.5,<3.0.0",
     "Jinja2>=3.1.6,<4.0.0",
+
+    # Block 4 - HTTP client
+    "httpx>=0.24.0",
 ]
 
 [project.scripts]

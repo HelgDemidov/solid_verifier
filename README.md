@@ -201,6 +201,7 @@ Core third‑party libraries used by the dashboard:
 - [`import-linter`](https://pypi.org/project/import-linter/) — enforcement of layered contracts via CLI.
 - [`pyan3`](https://pypi.org/project/pyan3/) — call graph and dead‑code analysis.
 - [`jinja2`](https://pypi.org/project/Jinja2/) — HTML report generation (planned).
+- [`httpx`] (>=0.24.0): Synchronous HTTP client with granular timeout control, utilized by the `llmadapter` for executing robust HTTP calls to external and local LLM providers (OpenAI, Ollama).
 
 All are pinned via `requirements.txt` to stable versions compatible with the current Python runtime.
 

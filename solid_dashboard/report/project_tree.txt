@@ -18,7 +18,13 @@ tools/
     │   ├── llm
     │   │   ├── __init__.py
     │   │   ├── ast_parser.py
+    │   │   ├── budget.py
+    │   │   ├── cache,py
+    │   │   ├── errors.py
+    │   │   ├── factory.py
     │   │   ├── heuristics.py
+    │   │   ├── llm_gateway.py
+    │   │   ├── provider.py
     │   │   └── types.py
     │   ├── report
     │   │   ├── templates
