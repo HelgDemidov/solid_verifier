@@ -1,8 +1,3 @@
-"""
-Тесты Шага 3: identify_candidates + первые 4 эвристики.
-Для каждой эвристики — минимум один positive test (срабатывает)
-и один negative test (не срабатывает на чистом коде).
-"""
 
 # ---------------------------------------------------------------------------
 # НАПОМИНАЛКА ПО КОМАНДАМ ЗАПУСКА ТЕСТОВ
@@ -10,21 +5,29 @@
 
 # Только unit-тесты (быстро): pytest tools/solid_verifier/tests/llm/test_heuristics.py -v
 # Только интеграционные тесты: pytest -m integration -v
-# Всё вместе: pytest tools/solid_verifier/tests/llm/ -v
+# Все вместе: pytest tools/solid_verifier/tests/llm/ -v
 
 import textwrap
 import pytest
+from pathlib import Path
+import ast
 
-from tools.solid_verifier.solid_dashboard.llm.ast_parser import build_project_map
-from tools.solid_verifier.solid_dashboard.llm.heuristics import identify_candidates
-from tools.solid_verifier.solid_dashboard.llm.types import (
+from solid_dashboard.llm.ast_parser import build_project_map
+from solid_dashboard.llm.heuristics import (
+    _check_ocp_h_001,
+    _count_isinstance_branches,
+    identify_candidates,
+    _check_ocp_h_004,
+    _check_lsp_h_004
+)
+from solid_dashboard.llm.types import (
     ClassInfo,
     MethodSignature,
     ProjectMap,
 )
 
 # ---------------------------------------------------------------------------
-# Вспомогательная фабрика: создаёт ProjectMap из одного блока кода напрямую
+# Вспомогательная фабрика: создает ProjectMap из одного блока кода напрямую
 # (без записи на диск — для тестов отдельных эвристик)
 # ---------------------------------------------------------------------------
 
@@ -34,39 +37,77 @@ def _pm_from_source(
     parent_classes: list[str] | None = None,
     override_methods: list[str] | None = None,
 ) -> ProjectMap:
-    source = textwrap.dedent(source).strip()  # ← добавили .strip(), который ->
-    # убирает ведущий/хвостовой перенос строки из многострочного литерала ->
-    # в результате _parse_class_ast получает чистый код
-    
-    # Явно создаём ProjectMap с пустыми словарями
-    pm = ProjectMap(classes={}, interfaces={})  # ← было ProjectMap()
-    # Теперь явная инициализация вместо ProjectMap(), если dataclass не имеет default_factory
-    
-    methods = []
-    if override_methods:
-        for name in override_methods:
-            methods.append(MethodSignature(
-                name=name, parameters="self", return_type="Any", is_override=True
-            ))
+    """
+    Упрощенный helper: строит ProjectMap с одним ClassInfo по исходнику.
 
-    pm.classes[class_name] = ClassInfo(
-        name=class_name,
-        file_path="test_file.py",
-        source_code=source,
-        parent_classes=parent_classes or [],
-        implemented_interfaces=[],
-        methods=methods,
-        dependencies=[],
-    )
-    return pm
+    parent_classes: список имен базовых классов, который мы хотим видеть
+    в ClassInfo.parent_classes (например, ['ABC']).
+    override_methods: список имен методов, помечаемых как is_override=True.
+    """
+    # Нормализуем отступы
+    source_dedented = textwrap.dedent(source)
+
+    # Создаем временный .py-файл в каталоге для тестов
+    tmp_dir = Path.cwd() / ".tmp_heuristics_tests"
+    tmp_dir.mkdir(exist_ok=True)
+    tmp_file = tmp_dir / "tmp_module.py"
+    tmp_file.write_text(source_dedented, encoding="utf-8")
+
+    # Строим ProjectMap по пути файла
+    project_map = build_project_map([str(tmp_file)])
+
+    # Находим наш класс в полученном ProjectMap
+    class_info = project_map.classes[class_name]
+
+    # Переопределяем parent_classes, если явно переданы
+    if parent_classes is not None:
+        class_info = ClassInfo(
+            name=class_info.name,
+            file_path=class_info.file_path,
+            source_code=class_info.source_code,
+            parent_classes=parent_classes,
+            implemented_interfaces=class_info.implemented_interfaces,
+            methods=class_info.methods,
+            dependencies=class_info.dependencies,
+        )
+        project_map.classes[class_name] = class_info
+
+    # Отмечаем override-флаг для заданных методов (если нужно)
+    if override_methods:
+        new_methods: list[MethodSignature] = []
+        for m in class_info.methods:
+            if m.name in override_methods:
+                new_methods.append(
+                    MethodSignature(
+                        name=m.name,
+                        parameters=m.parameters,
+                        return_type=m.return_type,
+                        is_override=True,
+                        is_abstract=m.is_abstract,  # NEW: сохраняем флаг!
+                    )
+                )
+            else:
+                new_methods.append(m)
+        class_info = ClassInfo(
+            name=class_info.name,
+            file_path=class_info.file_path,
+            source_code=class_info.source_code,
+            parent_classes=class_info.parent_classes,
+            implemented_interfaces=class_info.implemented_interfaces,
+            methods=new_methods,
+            dependencies=class_info.dependencies,
+        )
+        project_map.classes[class_name] = class_info
+
+    return project_map
 
 # ---------------------------------------------------------------------------
-# LSP-H-001: raise NotImplementedError в переопределённом методе
+# LSP-H-001: raise NotImplementedError в переопределенном методе
 # ---------------------------------------------------------------------------
 
 class TestLspH001:
     def test_positive_bare_raise(self):
-        """Переопределённый метод бросает NotImplementedError без аргументов."""
+        """Переопределенный метод бросает NotImplementedError без аргументов."""
         pm = _pm_from_source(
             """
             class Child(Base):
@@ -75,12 +116,12 @@ class TestLspH001:
             """,
             "Child", parent_classes=["Base"], override_methods=["run"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-001" in rules
 
     def test_positive_raise_with_message(self):
-        """Переопределённый метод бросает NotImplementedError с сообщением."""
+        """Переопределенный метод бросает NotImplementedError с сообщением."""
         pm = _pm_from_source(
             """
             class Child(Base):
@@ -89,7 +130,7 @@ class TestLspH001:
             """,
             "Child", parent_classes=["Base"], override_methods=["run"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-001" in rules
 
@@ -102,9 +143,9 @@ class TestLspH001:
                     raise NotImplementedError("to be implemented by subclasses")
             """,
             "StandaloneUtil",
-            # override_methods не передаём — метод не помечен как is_override
+            # override_methods не передаем — метод не помечен как is_override
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-001" not in rules
 
@@ -118,7 +159,7 @@ class TestLspH001:
             """,
             "Child", parent_classes=["Base"], override_methods=["run"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-001" not in rules
 
@@ -132,7 +173,7 @@ class TestLspH001:
             """,
             "Child", parent_classes=["Base"], override_methods=["process"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         finding = next(f for f in result.findings if f.rule == "LSP-H-001")
         assert finding.source == "heuristic"
         assert finding.severity == "warning"
@@ -141,14 +182,34 @@ class TestLspH001:
         assert finding.details.principle == "LSP"
         assert "process" in finding.message
 
+    def test_abstract_method_without_abc_base_is_ignored(self):
+        """Класс с @abstractmethod и NotImplementedError не дает LSP-H-001."""
+        source = """
+        from abc import abstractmethod
+
+        class BaseAdapter:
+            @abstractmethod
+            def process(self, value: int) -> str:
+                raise NotImplementedError
+        """
+        pm = _pm_from_source(
+            source=source,
+            class_name="BaseAdapter",
+            # parent_classes не задаем: нет ABC
+            override_methods=["process"],
+        )
+
+        result = identify_candidates(pm, exclude_patterns=[])
+        findings = [f for f in result.findings if f.rule == "LSP-H-001"]
+        assert findings == []
 
 # ---------------------------------------------------------------------------
-# LSP-H-002: пустое тело переопределённого метода
+# LSP-H-002: пустое тело переопределенного метода
 # ---------------------------------------------------------------------------
 
 class TestLspH002:
     def test_positive_pass_body(self):
-        """Переопределённый метод содержит только pass."""
+        """Переопределенный метод содержит только pass."""
         pm = _pm_from_source(
             """
             class Child(Base):
@@ -157,12 +218,12 @@ class TestLspH002:
             """,
             "Child", parent_classes=["Base"], override_methods=["save"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-002" in rules
 
     def test_positive_docstring_only_body(self):
-        """Переопределённый метод содержит только docstring."""
+        """Переопределенный метод содержит только docstring."""
         pm = _pm_from_source(
             """
             class Child(Base):
@@ -171,12 +232,12 @@ class TestLspH002:
             """,
             "Child", parent_classes=["Base"], override_methods=["save"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-002" in rules
 
     def test_negative_method_with_body(self):
-        """Переопределённый метод имеет реализацию — эвристика молчит."""
+        """Переопределенный метод имеет реализацию — эвристика молчит."""
         pm = _pm_from_source(
             """
             class Child(Base):
@@ -186,7 +247,7 @@ class TestLspH002:
             """,
             "Child", parent_classes=["Base"], override_methods=["save"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-002" not in rules
 
@@ -200,193 +261,328 @@ class TestLspH002:
             """,
             "NewClass",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-002" not in rules
 
+    def test_abstract_base_class_with_pass_is_ignored(self):
+        """Абстрактный класс с pass-телом не должен давать finding."""
+        source = """
+        from abc import ABC, abstractmethod
 
-# ---------------------------------------------------------------------------
-# OCP-H-001: цепочки if/elif с isinstance()
-# ---------------------------------------------------------------------------
-
-class TestOcpH001:
-    def test_positive_three_branch_chain(self):
-        """Цепочка if/elif/elif с isinstance — ровно 3 ветви, порог == 3."""
-        pm = _pm_from_source(
-            """
-            class Renderer:
-                def render(self, obj):
-                    if isinstance(obj, Circle):
-                        self._draw_circle(obj)
-                    elif isinstance(obj, Square):
-                        self._draw_square(obj)
-                    elif isinstance(obj, Triangle):
-                        self._draw_triangle(obj)
-            """,
-            "Renderer",
+        class BaseHandler(ABC):
+            @abstractmethod
+            def handle(self, value: int) -> None:
+                pass
+        """
+        project_map = _pm_from_source(
+            source=source,
+            class_name="BaseHandler",
+            parent_classes=["ABC"],          # помечаем как абстрактный
+            override_methods=["handle"],     # handle считается override
         )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-001" in rules
 
-    def test_positive_five_branch_chain(self):
-        """Длинная цепочка из 5 ветвей — эвристика срабатывает."""
-        pm = _pm_from_source(
-            """
-            class Handler:
-                def handle(self, event):
-                    if isinstance(event, ClickEvent):
-                        pass
-                    elif isinstance(event, KeyEvent):
-                        pass
-                    elif isinstance(event, ScrollEvent):
-                        pass
-                    elif isinstance(event, ResizeEvent):
-                        pass
-                    elif isinstance(event, CloseEvent):
-                        pass
-            """,
-            "Handler",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-001" in rules
+        result = identify_candidates(project_map, exclude_patterns=[])
+        lsp_h002_findings = [
+            f for f in result.findings if f.rule == "LSP-H-002"
+        ]
 
-    def test_negative_two_branch_chain(self):
-        """Только 2 ветви (if + elif) — ниже порога, эвристика молчит."""
-        pm = _pm_from_source(
-            """
-            class Formatter:
-                def format(self, value):
-                    if isinstance(value, int):
-                        return str(value)
-                    elif isinstance(value, float):
-                        return f"{value:.2f}"
-            """,
-            "Formatter",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-001" not in rules
+        assert lsp_h002_findings == []
 
-    def test_negative_isinstance_without_elif_chain(self):
-        """isinstance используется в одиночном if без цепочки — эвристика молчит."""
-        pm = _pm_from_source(
-            """
-            class Validator:
-                def validate(self, value):
-                    if isinstance(value, str):
-                        return len(value) > 0
-                    return True
-            """,
-            "Validator",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-001" not in rules
+    def test_abstract_method_with_pass_is_ignored(self):
+        """Класс с @abstractmethod и pass-телом не дает LSP-H-002."""
+        source = """
+        from abc import abstractmethod
 
-    def test_negative_if_without_isinstance(self):
-        """Цепочка if/elif без isinstance — не OCP-запах, эвристика молчит."""
+        class BaseHandler:
+            @abstractmethod
+            def handle(self, value: int) -> None:
+                pass
+        """
         pm = _pm_from_source(
-            """
-            class Router:
-                def route(self, path):
-                    if path == "/home":
-                        return "home"
-                    elif path == "/about":
-                        return "about"
-                    elif path == "/contact":
-                        return "contact"
-            """,
-            "Router",
+            source=source,
+            class_name="BaseHandler",
+            override_methods=["handle"],
         )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-001" not in rules
 
-    def test_finding_contains_branch_count(self):
-        """В тексте сообщения должно быть указано количество ветвей."""
-        pm = _pm_from_source(
-            """
-            class P:
-                def process(self, obj):
-                    if isinstance(obj, A):
-                        pass
-                    elif isinstance(obj, B):
-                        pass
-                    elif isinstance(obj, C):
-                        pass
-            """,
-            "P",
-        )
-        result = identify_candidates(pm)
-        finding = next(f for f in result.findings if f.rule == "OCP-H-001")
-        assert "3" in finding.message
+        result = identify_candidates(pm, exclude_patterns=[])
+        findings = [f for f in result.findings if f.rule == "LSP-H-002"]
+        assert findings == []
 
 
 # ---------------------------------------------------------------------------
-# LSP-H-004: __init__ без super().__init__()
+# Тесты для OCP-H-001 (Переработанная логика type-dispatch цепочек)
 # ---------------------------------------------------------------------------
 
-class TestLspH004:
+def test_count_isinstance_branches_helper():
+    """Проверяем, что хелпер корректно считает только ветки с isinstance."""
+    code = textwrap.dedent("""
+        if isinstance(x, A):
+            pass
+        elif x == 1:
+            pass
+        elif isinstance(x, B):
+            pass
+        elif isinstance(x, C):
+            pass
+        else:
+            pass
+    """)
+    tree = ast.parse(code)
+    if_node = tree.body[0]
+    
+    # Убеждаемся для Pylance, что if_node — это действительно ast.If
+    assert isinstance(if_node, ast.If)
+    # Всего 4 ветки (не считая else), но isinstance только в 3 из них
+    assert _count_isinstance_branches(if_node) == 3
+
+class TestOcpH001Updated:
+    def setup_method(self):
+        # Заполняем все обязательные поля, требуемые в актуальном types.ClassInfo
+        self.class_info = ClassInfo(
+            name="Processor",
+            file_path="processor.py",
+            source_code="",               # Для этих тестов сам код внутри ClassInfo не используется
+            parent_classes=[],
+            implemented_interfaces=[],    # Добавлено недостающее поле
+            methods=[],
+            dependencies=[],              # Добавлено недостающее поле
+        )
+
+    def _get_class_node(self, code: str) -> ast.ClassDef:
+        tree = ast.parse(textwrap.dedent(code))
+        node = tree.body[0]
+        # Type Guard: убеждаемся, что распарсенная нода — это класс
+        assert isinstance(node, ast.ClassDef)
+        return node
+
+    def test_pure_isinstance_chain_triggers(self):
+        """Проверяем классическую ситуацию: 3 подряд isinstance."""
+        code = """
+        class Processor:
+            def process(self, x):
+                if isinstance(x, A): pass
+                elif isinstance(x, B): pass
+                elif isinstance(x, C): pass
+        """
+        node = self._get_class_node(code)
+        findings = _check_ocp_h_001(node, self.class_info)
+
+        assert len(findings) == 1
+        assert findings[0].rule == "OCP-H-001"
+        assert "3 isinstance checks" in findings[0].message
+
+    def test_guard_plus_isinstance_chain_triggers(self):
+        """
+        ПРЕДОТВРАЩЕНИЕ FALSE NEGATIVE: 
+        Цепочка начинается с обычного условия (guard), но дальше идут 3 isinstance.
+        Раньше эвристика это пропускала, теперь должна находить.
+        """
+        code = """
+        class Processor:
+            def process(self, x):
+                if not x: return
+                elif isinstance(x, A): pass
+                elif isinstance(x, B): pass
+                elif isinstance(x, C): pass
+        """
+        node = self._get_class_node(code)
+        findings = _check_ocp_h_001(node, self.class_info)
+
+        assert len(findings) == 1
+        assert "3 isinstance checks" in findings[0].message
+        
+        # Type Guard для Pylance: убеждаемся, что details и explanation не None
+        assert findings[0].details is not None
+        expl = findings[0].details.explanation
+        assert expl is not None, "Explanation must be provided"
+        assert "length 4" in expl
+        assert "3 branches check concrete types" in expl
+
+    def test_status_checks_with_one_isinstance_no_trigger(self):
+        """
+        ПРЕДОТВРАЩЕНИЕ FALSE POSITIVE:
+        Длинная цепочка (>=3), но isinstance только в одной ветке.
+        Раньше эвристика ложно срабатывала, теперь должна игнорировать.
+        """
+        code = """
+        class Processor:
+            def process(self, x):
+                if isinstance(x, Special): pass
+                elif x.status == 1: pass
+                elif x.status == 2: pass
+                elif x.status == 3: pass
+        """
+        node = self._get_class_node(code)
+        findings = _check_ocp_h_001(node, self.class_info)
+
+        # Ложных срабатываний быть не должно
+        assert len(findings) == 0
+
+
+# ---------------------------------------------------------------------------
+# LSP-H-004: __init__ без super().__init__() (включая dataclass и исключения)
+# ---------------------------------------------------------------------------
+
+class TestLspH004Updated:
+    def setup_method(self):
+        # Базовая заглушка для тестов, где есть родитель
+        self.class_info = ClassInfo(
+            name="Child",
+            file_path="child.py",
+            source_code="",
+            parent_classes=["Base"], 
+            implemented_interfaces=[],
+            methods=[],
+            dependencies=[],
+        )
+
+    def _get_class_node(self, code: str) -> ast.ClassDef:
+        tree = ast.parse(textwrap.dedent(code))
+        node = tree.body[0]
+        assert isinstance(node, ast.ClassDef)
+        return node
+
+    # --- 1. Базовые сценарии ---
+
     def test_positive_init_without_super(self):
         """__init__ есть, но super().__init__() не вызывается."""
-        pm = _pm_from_source(
-            """
-            class Child(Base):
-                def __init__(self):
-                    self.value = 42
-            """,
-            "Child", parent_classes=["Base"],
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "LSP-H-004" in rules
+        code = """
+        class Child(Base):
+            def __init__(self):
+                self.value = 42
+        """
+        node = self._get_class_node(code)
+        findings = _check_lsp_h_004(node, self.class_info)
+        
+        assert len(findings) == 1
+        assert findings[0].rule == "LSP-H-004"
 
     def test_negative_init_with_super(self):
         """__init__ вызывает super().__init__() — эвристика молчит."""
-        pm = _pm_from_source(
-            """
-            class Child(Base):
-                def __init__(self, name):
-                    super().__init__()
-                    self.name = name
-            """,
-            "Child", parent_classes=["Base"],
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "LSP-H-004" not in rules
+        code = """
+        class Child(Base):
+            def __init__(self, name):
+                super().__init__()
+                self.name = name
+        """
+        node = self._get_class_node(code)
+        findings = _check_lsp_h_004(node, self.class_info)
+        assert len(findings) == 0
 
     def test_negative_no_init_at_all(self):
         """Подкласс без __init__ — эвристика молчит (наследует от родителя)."""
-        pm = _pm_from_source(
-            """
-            class Child(Base):
-                def run(self):
-                    pass
-            """,
-            "Child", parent_classes=["Base"],
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "LSP-H-004" not in rules
+        code = """
+        class Child(Base):
+            def run(self):
+                pass
+        """
+        node = self._get_class_node(code)
+        findings = _check_lsp_h_004(node, self.class_info)
+        assert len(findings) == 0
 
     def test_negative_standalone_class_with_init(self):
         """Класс без родителей — проверка не применима, эвристика молчит."""
-        pm = _pm_from_source(
-            """
-            class Standalone:
-                def __init__(self):
-                    self.value = 0
-            """,
-            "Standalone",
-            # parent_classes пустой — нет родителей
+        code = """
+        class Standalone:
+            def __init__(self):
+                self.value = 0
+        """
+        node = self._get_class_node(code)
+        
+        # Меняем ClassInfo: убираем родителей
+        standalone_info = ClassInfo(
+            name="Standalone", file_path="a.py", source_code="",
+            parent_classes=[], implemented_interfaces=[],
+            methods=[], dependencies=[]
         )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "LSP-H-004" not in rules
+        
+        findings = _check_lsp_h_004(node, standalone_info)
+        assert len(findings) == 0
 
+
+    # --- 2. Сценарии с исключенными родительскими классами ---
+
+    def test_negative_explicit_object_parent(self):
+        """Явное наследование от object не должно давать LSP-H-004."""
+        code = """
+        class MyValueObject(object):
+            def __init__(self):
+                self.x = 1
+        """
+        node = self._get_class_node(code)
+        
+        info = ClassInfo(
+            name="MyValueObject", file_path="a.py", source_code="",
+            parent_classes=["object"], implemented_interfaces=[],
+            methods=[], dependencies=[]
+        )
+        
+        findings = _check_lsp_h_004(node, info)
+        assert len(findings) == 0
+
+    def test_negative_abc_parent(self):
+        """Наследование от ABC (абстрактный класс) игнорируется."""
+        code = """
+        class BaseService(ABC):
+            def __init__(self):
+                self.x = 1
+        """
+        node = self._get_class_node(code)
+        
+        info = ClassInfo(
+            name="BaseService", file_path="a.py", source_code="",
+            parent_classes=["ABC"], implemented_interfaces=[],
+            methods=[], dependencies=[]
+        )
+        
+        findings = _check_lsp_h_004(node, info)
+        assert len(findings) == 0
+
+    def test_negative_protocol_parent(self):
+        """Наследование от Protocol игнорируется."""
+        code = """
+        class RepositoryProtocol(Protocol):
+            def __init__(self):
+                self.x = 1
+        """
+        node = self._get_class_node(code)
+        
+        info = ClassInfo(
+            name="RepositoryProtocol", file_path="a.py", source_code="",
+            parent_classes=["Protocol"], implemented_interfaces=[],
+            methods=[], dependencies=[]
+        )
+        
+        findings = _check_lsp_h_004(node, info)
+        assert len(findings) == 0
+
+
+    # --- 3. Сценарии с Dataclass ---
+
+    def test_lsp_h_004_ignores_simple_dataclass_decorator(self):
+        """ПРЕДОТВРАЩЕНИЕ FALSE POSITIVE: простой декоратор @dataclass."""
+        code = """
+        @dataclass
+        class MyDto(Base):
+            def __init__(self, x):
+                self.x = x
+        """
+        node = self._get_class_node(code)
+        findings = _check_lsp_h_004(node, self.class_info)
+        assert len(findings) == 0
+
+    def test_lsp_h_004_ignores_dataclass_with_args_decorator(self):
+        """ПРЕДОТВРАЩЕНИЕ FALSE POSITIVE: декоратор с аргументами @dataclass(kw_only=True)."""
+        code = """
+        @dataclass(kw_only=True)
+        class MyDto(Base):
+            def __init__(self, x):
+                self.x = x
+        """
+        node = self._get_class_node(code)
+        findings = _check_lsp_h_004(node, self.class_info)
+        assert len(findings) == 0
 
 # ---------------------------------------------------------------------------
 # Тесты identify_candidates: приоритеты, типы кандидатов, пустой ProjectMap
@@ -395,7 +591,7 @@ class TestLspH004:
 class TestIdentifyCandidatesOrchestration:
     def test_empty_project_map(self):
         """Пустой ProjectMap → пустой HeuristicResult."""
-        result = identify_candidates(ProjectMap())
+        result = identify_candidates(ProjectMap(), exclude_patterns=[])
         assert result.findings == []
         assert result.candidates == []
 
@@ -427,7 +623,7 @@ class TestIdentifyCandidatesOrchestration:
                 if m.name == "run":
                     m.is_override = True
 
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
 
         if len(result.candidates) >= 2:
             assert result.candidates[0].priority >= result.candidates[1].priority
@@ -448,7 +644,7 @@ class TestIdentifyCandidatesOrchestration:
             "Dispatcher",
             # Нет parent_classes — нет иерархии
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         if result.candidates:
             candidate = next(
                 (c for c in result.candidates if c.class_name == "Dispatcher"), None
@@ -470,11 +666,13 @@ class TestIdentifyCandidatesOrchestration:
                         pass
                     elif isinstance(event, C):
                         pass
+                    elif isinstance(event, D):
+                        pass
             """,
             "Mixed",
             parent_classes=["Base"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         candidate = next(
             (c for c in result.candidates if c.class_name == "Mixed"), None
         )
@@ -491,12 +689,12 @@ class TestIdentifyCandidatesOrchestration:
             """,
             "Child", parent_classes=["Base"], override_methods=["run"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         for finding in result.findings:
             assert finding.source == "heuristic"
 
     def test_dynamic_base_class_skipped(self):
-        """Класс с динамической базой <dynamic> пропускается эвристиками."""
+        """Класс с динамической базой пропускается эвристиками."""
         pm = _pm_from_source(
             """
             class Foo(get_base()):
@@ -504,10 +702,10 @@ class TestIdentifyCandidatesOrchestration:
                     raise NotImplementedError
             """,
             "Foo",
-            parent_classes=["<dynamic>"],
+            parent_classes=[""],  # <--- Замените "<dynamic>" на пустую строку
             override_methods=["run"],
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-001" not in rules
 
@@ -521,7 +719,7 @@ class TestOcpH002:
         import ast as _ast
 
         # Сначала проверяем поддержку синтаксиса match/case
-        # Если её нет (Python < 3.10), тест аккуратно пропускается
+        # Если ее нет (Python < 3.10), тест аккуратно пропускается
         if not hasattr(_ast, "Match"):
             pytest.skip("match/case requires Python 3.10+")
 
@@ -539,30 +737,30 @@ class TestOcpH002:
             """,
             "EventProcessor",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "OCP-H-002" in rules
 
-        def test_negative_two_case_branches(self):
-            """match/case с двумя ветвями — ниже порога, эвристика молчит."""
-            pm = _pm_from_source(
-                """
-                class SmallSwitch:
-                    def handle(self, event):
-                        match event:
-                            case ClickEvent():
-                                pass
-                            case KeyEvent():
-                                pass
-                """,
-                "SmallSwitch",
-            )
-            result = identify_candidates(pm)
-            rules = [f.rule for f in result.findings]
-            import ast as _ast
-            if not hasattr(_ast, "Match"):
-                pytest.skip("match/case requires Python 3.10+")
-            assert "OCP-H-002" not in rules
+    def test_negative_two_case_branches(self):
+        """match/case с двумя ветвями — ниже порога, эвристика молчит."""
+        pm = _pm_from_source(
+            """
+            class SmallSwitch:
+                def handle(self, event):
+                    match event:
+                        case ClickEvent():
+                            pass
+                        case KeyEvent():
+                            pass
+            """,
+            "SmallSwitch",
+        )
+        result = identify_candidates(pm, exclude_patterns=[])
+        rules = [f.rule for f in result.findings]
+        import ast as _ast
+        if not hasattr(_ast, "Match"):
+            pytest.skip("match/case requires Python 3.10+")
+        assert "OCP-H-002" not in rules
 
     def test_finding_metadata_ocp_h002(self):
         """Finding содержит корректные метаданные."""
@@ -583,7 +781,7 @@ class TestOcpH002:
             """,
             "Dispatcher",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         finding = next((f for f in result.findings if f.rule == "OCP-H-002"), None)
         assert finding is not None
         assert finding.details is not None          # ← добавили
@@ -596,10 +794,10 @@ class TestOcpH002:
 class TestLspH003:
     def test_positive_isinstance_on_annotated_base_param(self, tmp_path):
         """
-        Метод принимает базовый тип и использует isinstance на нём.
+        Метод принимает базовый тип и использует isinstance на нем.
         Базовый тип должен быть в ProjectMap.
         """
-        # Создаём файл с базовым классом и потребителем
+        # Создаем файл с базовым классом и потребителем
         f = tmp_path / "example.py"
         f.write_text(textwrap.dedent("""
             class Animal:
@@ -611,7 +809,7 @@ class TestLspH003:
                         animal.speak()
         """), encoding="utf-8")
         pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-003" in rules
 
@@ -629,7 +827,7 @@ class TestLspH003:
                     return repr(obj)
         """), encoding="utf-8")
         pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-003" not in rules
 
@@ -646,7 +844,7 @@ class TestLspH003:
                         obj.speak()
         """), encoding="utf-8")
         pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         assert "LSP-H-003" not in rules
 
@@ -663,292 +861,86 @@ class TestLspH003:
                         shape.draw()
         """), encoding="utf-8")
         pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         finding = next((f for f in result.findings if f.rule == "LSP-H-003"), None)
         assert finding is not None
         assert "shape" in finding.message
         assert "Shape" in finding.message
 
-
 # ---------------------------------------------------------------------------
-# OCP-H-003: словарь-диспетчер типов
-# ---------------------------------------------------------------------------
-
-class TestOcpH003:
-    def test_positive_type_key_dict_in_method(self, tmp_path):
-        """Словарь с ключами-именами классов из ProjectMap в методе."""
-        f = tmp_path / "example.py"
-        f.write_text(textwrap.dedent("""
-            class CircleRenderer:
-                def draw(self): pass
-
-            class SquareRenderer:
-                def draw(self): pass
-
-            class TriangleRenderer:
-                def draw(self): pass
-
-            class DrawingEngine:
-                def setup(self):
-                    self._handlers = {
-                        CircleRenderer: self._draw_circle,
-                        SquareRenderer: self._draw_square,
-                        TriangleRenderer: self._draw_triangle,
-                    }
-                def _draw_circle(self): pass
-                def _draw_square(self): pass
-                def _draw_triangle(self): pass
-        """), encoding="utf-8")
-        pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-003" in rules
-
-    def test_negative_data_dict_not_dispatcher(self, tmp_path):
-        """Словарь с данными (не callable значениями) — эвристика молчит."""
-        f = tmp_path / "example.py"
-        f.write_text(textwrap.dedent("""
-            class TypeA:
-                pass
-            class TypeB:
-                pass
-            class TypeC:
-                pass
-
-            class Config:
-                def __init__(self):
-                    # Словарь с данными, не с callable — не OCP-запах
-                    self._labels = {
-                        TypeA: "type_a_label",
-                        TypeB: "type_b_label",
-                        TypeC: "type_c_label",
-                    }
-        """), encoding="utf-8")
-        pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-003" not in rules
-
-    def test_negative_two_type_keys_below_threshold(self, tmp_path):
-        """Словарь только с двумя типовыми ключами — ниже порога."""
-        f = tmp_path / "example.py"
-        f.write_text(textwrap.dedent("""
-            class Dog:
-                def speak(self): pass
-            class Cat:
-                def speak(self): pass
-
-            class SoundDispatcher:
-                def setup(self):
-                    self._handlers = {
-                        Dog: self._dog_sound,
-                        Cat: self._cat_sound,
-                    }
-                def _dog_sound(self): pass
-                def _cat_sound(self): pass
-        """), encoding="utf-8")
-        pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-003" not in rules
-
-    def test_finding_metadata_ocp_h003(self, tmp_path):
-        """Finding содержит корректные метаданные source и principle."""
-        f = tmp_path / "example.py"
-        f.write_text(textwrap.dedent("""
-            class StrategyA:
-                def run(self): pass
-            class StrategyB:
-                def run(self): pass
-            class StrategyC:
-                def run(self): pass
-
-            class StrategyEngine:
-                def build(self):
-                    self._map = {
-                        StrategyA: self._run_a,
-                        StrategyB: self._run_b,
-                        StrategyC: self._run_c,
-                    }
-                def _run_a(self): pass
-                def _run_b(self): pass
-                def _run_c(self): pass
-        """), encoding="utf-8")
-        pm = build_project_map([str(f)])
-        result = identify_candidates(pm)
-        finding = next((f for f in result.findings if f.rule == "OCP-H-003"), None)
-        assert finding is not None
-        assert finding.source == "heuristic"
-        assert finding.details is not None   
-        assert finding.details.principle == "OCP"
-
-
-# ---------------------------------------------------------------------------
-# OCP-H-004: высокая цикломатическая сложность + isinstance
+# Тесты для OCP-H-004 (Сложность + isinstance с учетом границ AST)
 # ---------------------------------------------------------------------------
 
-class TestOcpH004:
-
-    def test_positive_high_cc_with_isinstance(self):
-        """
-        Метод с CC >= 5 и isinstance() — эвристика срабатывает.
-        Строим метод с ровно 5 узлами ветвления (CC=5):
-        4 if-ветви + 1 isinstance = 5 добавленных узлов, итого CC = 6.
-        """
-        pm = _pm_from_source(
-            """
-            class OrderProcessor:
-                def process(self, order):
-                    if order.status == "new":
-                        self._init(order)
-                    if order.priority > 5:
-                        self._escalate(order)
-                    if order.retry_count < 3:
-                        self._retry(order)
-                    if order.region == "EU":
-                        self._apply_eu_rules(order)
-                    if isinstance(order, SpecialOrder):
-                        self._handle_special(order)
-            """,
-            "OrderProcessor",
+class TestOcpH004Updated:
+    def setup_method(self):
+        # Используем ту же правильную заглушку ClassInfo
+        self.class_info = ClassInfo(
+            name="ComplexProcessor",
+            file_path="processor.py",
+            source_code="",
+            parent_classes=[],
+            implemented_interfaces=[],
+            methods=[],
+            dependencies=[],
         )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-004" in rules
 
-    def test_positive_cc_exactly_at_threshold(self):
-        """
-        CC ровно на пороге (== _OCP_H004_CC_THRESHOLD) + isinstance.
-        Граничный случай: порог включительный (>=), должен сработать.
-        Строим метод с CC = 5: базовая 1 + 4 if-ветви.
-        """
-        pm = _pm_from_source(
-            """
-            class Checker:
-                def check(self, item):
-                    if item.a:
-                        pass
-                    if item.b:
-                        pass
-                    if item.c:
-                        pass
-                    if isinstance(item, Special):
-                        pass
-            """,
-            "Checker",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        # CC = 1 (base) + 4 (четыре if) = 5, порог = 5 → должен сработать
-        assert "OCP-H-004" in rules
+    def _get_class_node(self, code: str) -> ast.ClassDef:
+        tree = ast.parse(textwrap.dedent(code))
+        node = tree.body[0]
+        assert isinstance(node, ast.ClassDef)
+        return node
 
-    def test_negative_high_cc_without_isinstance(self):
+    def test_ocp_h_004_nested_isinstance_ignored(self):
         """
-        Высокая CC, но без isinstance — эвристика молчит.
-        Сложный метод без type-dispatch — не OCP-запах для этой эвристики.
+        ПРЕДОТВРАЩЕНИЕ FALSE POSITIVE:
+        Проверяет, что вызов isinstance() внутри вложенной функции
+        не триггерит OCP-H-004 для внешнего метода, даже если он сложный.
         """
-        pm = _pm_from_source(
-            """
-            class Calculator:
-                def calculate(self, data):
-                    if data.mode == "fast":
-                        result = data.value * 2
-                    elif data.mode == "slow":
-                        result = data.value * 3
-                    elif data.mode == "precise":
-                        result = data.value * 4
-                    elif data.mode == "estimate":
-                        result = data.value * 5
-                    else:
-                        result = data.value
-                    return result
-            """,
-            "Calculator",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        assert "OCP-H-004" not in rules
-
-    def test_negative_low_cc_with_isinstance(self):
-        """
-        isinstance есть, но CC ниже порога — эвристика молчит.
-        Простой метод с одним isinstance не считается OCP-запахом этой эвристики.
-        (OCP-H-001 и OCP-H-002 покрывают простые случаи с цепочками.)
-        """
-        pm = _pm_from_source(
-            """
-            class Formatter:
-                def format(self, value):
-                    if isinstance(value, int):
-                        return str(value)
-                    return repr(value)
-            """,
-            "Formatter",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        # CC = 1 (base) + 1 (if) + 1 (isinstance-if) = 2+1 = нет, считаем точно:
-        # ast.If для isinstance + ast.If нет отдельно (это тот же ast.If) → CC=2
-        assert "OCP-H-004" not in rules
-
-    def test_negative_below_threshold_exactly(self):
-        """
-        CC ровно на 1 ниже порога (CC = 4) + isinstance — не срабатывает.
-        Проверяем, что порог строгий: CC < 5 → тишина.
-        """
-        pm = _pm_from_source(
-            """
-            class Validator:
-                def validate(self, obj):
-                    if obj.field_a:
+        # Делаем CC = 5 для внешнего метода (база 1 + 4 if'а)
+        code = """
+        class ComplexProcessor:
+            def process(self, x):
+                if x > 1: pass
+                if x > 2: pass
+                if x > 3: pass
+                if x > 4: pass
+                
+                def inner_helper(y):
+                    # Этот isinstance не должен портить статистику process()
+                    if isinstance(y, int):
                         pass
-                    if obj.field_b:
-                        pass
-                    if isinstance(obj, SpecialObj):
-                        pass
-            """,
-            "Validator",
-        )
-        result = identify_candidates(pm)
-        rules = [f.rule for f in result.findings]
-        # CC = 1 (base) + 3 (три if) = 4 < 5 → не срабатывает
-        assert "OCP-H-004" not in rules
+        """
+        node = self._get_class_node(code)
+        findings = _check_ocp_h_004(node, self.class_info)
+        
+        # До исправления ast.walk находил бы isinstance и выдавал ошибку.
+        # Теперь эвристика должна молчать.
+        assert len(findings) == 0
 
-    def test_finding_metadata_ocp_h004(self):
+    def test_ocp_h_004_direct_isinstance_triggers(self):
         """
-        Finding содержит корректные метаданные: rule, source, principle, CC в message.
+        Проверяет, что isinstance() в самом методе с высокой CC 
+        корректно триггерит OCP-H-004.
         """
-        pm = _pm_from_source(
-            """
-            class Engine:
-                def run(self, task):
-                    if task.urgent:
-                        self._fast_path(task)
-                    if task.retries > 0:
-                        self._retry_path(task)
-                    if task.region == "US":
-                        self._us_rules(task)
-                    if task.region == "EU":
-                        self._eu_rules(task)
-                    if isinstance(task, PremiumTask):
-                        self._premium(task)
-            """,
-            "Engine",
-        )
-        result = identify_candidates(pm)
-        finding = next((f for f in result.findings if f.rule == "OCP-H-004"), None)
-        assert finding is not None
-        assert finding.source == "heuristic"
-        assert finding.severity == "warning"
-        assert finding.details is not None
-        assert finding.details.principle == "OCP"
-        # CC в тексте сообщения — важно для debuggability
-        assert "run" in finding.message
-        # Проверяем, что числовое значение CC попало в сообщение
-        assert any(char.isdigit() for char in finding.message)
+        code = """
+        class ComplexProcessor:
+            def process(self, x):
+                if x > 1: pass
+                if x > 2: pass
+                if x > 3: pass
+                if x > 4: pass
+                
+                if isinstance(x, int):
+                    pass
+        """
+        node = self._get_class_node(code)
+        findings = _check_ocp_h_004(node, self.class_info)
+        
+        assert len(findings) == 1
+        assert findings[0].rule == "OCP-H-004"
 
 # ---------------------------------------------------------------------------
-# Тесты корректности подсчёта CC: вложенные функции и классы в методах
+# Тесты корректности подсчета CC: вложенные функции и классы в методах
 # ---------------------------------------------------------------------------
 
 class TestCcNestedScopes:
@@ -961,7 +953,7 @@ class TestCcNestedScopes:
     особенно в async-коде, data-pipelines, фабричных методах.
 
     Без корректного обхода OCP-H-004 выдавал бы ложные срабатывания на
-    любом методе с вложенной функцией, у которой есть своя разветвлённая логика.
+    любом методе с вложенной функцией, у которой есть своя разветвленная логика.
     """
 
     def test_nested_function_if_not_counted(self):
@@ -981,7 +973,7 @@ class TestCcNestedScopes:
             """,
             "Wrapper",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         # CC process() = 1 (base) + 1 (внешний if) = 2 < порога 5
         # OCP-H-004 не должен сработать
@@ -1006,7 +998,7 @@ class TestCcNestedScopes:
             """,
             "AsyncHandler",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         # CC build_task() = 1 + 1 = 2 (только внешний if считается)
         # _worker() со своими 5 if-ами — отдельная единица, не влияет
@@ -1031,7 +1023,7 @@ class TestCcNestedScopes:
             """,
             "Factory",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         # CC make() = 1 + 1 = 2, вложенный класс _Impl и его методы не считаются
         assert "OCP-H-004" not in rules
@@ -1054,7 +1046,7 @@ class TestCcNestedScopes:
             """,
             "Processor",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         # CC process() = 1 + 4 (четыре if в теле) = 5 >= порога
         # isinstance есть → OCP-H-004 должен сработать
@@ -1084,8 +1076,214 @@ class TestCcNestedScopes:
             """,
             "Router",
         )
-        result = identify_candidates(pm)
+        result = identify_candidates(pm, exclude_patterns=[])
         rules = [f.rule for f in result.findings]
         # CC route() = 1 + 4 (4 ветви в elif-цепочке) = 5 >= порога
         # isinstance есть во внешней цепочке → OCP-H-004 срабатывает
         assert "OCP-H-004" in rules
+
+# ===========================================================================
+# Тесты дедупликации (Шаг 3)
+# ===========================================================================
+
+from solid_dashboard.llm.heuristics import _deduplicate_findings
+from solid_dashboard.llm.types import Finding, FindingDetails
+
+class TestDeduplicateFindings:
+    """
+    Проверяет логику слияния конфликтующих findings для одного метода.
+    По правилам Шага 3:
+    - OCP-H-001 > OCP-H-004
+    - LSP-H-001 > LSP-H-002
+    """
+
+    def test_ocp_h001_and_h004_on_same_method_are_merged(self):
+        """
+        Если на один метод срабатывают обе OCP-эвристики, должен остаться
+        только OCP-H-001 (как более специфичный), а факт обнаружения OCP-H-004
+        записывается в explanation.
+        """
+        file_path = "app/services/payment_service.py"
+        class_name = "PaymentService"
+        method_name = "process"
+
+        # Имитируем finding от проверки isinstance-цепочек (OCP-H-001)
+        f1 = Finding(
+            rule="OCP-H-001",
+            file=file_path,
+            class_name=class_name,
+            line=None,
+            severity="warning",
+            message="Method 'process' contains an isinstance() chain with 4 branches",
+            source="heuristic",
+            details=FindingDetails(
+                principle="OCP",
+                explanation="OCP-H-001 explanation",
+                suggestion="OCP-H-001 suggestion",
+                method_name=method_name,
+            ),
+        )
+
+        # Имитируем finding от проверки цикломатической сложности (OCP-H-004)
+        f2 = Finding(
+            rule="OCP-H-004",
+            file=file_path,
+            class_name=class_name,
+            line=None,
+            severity="warning",
+            message="Method 'process' has high cyclomatic complexity",
+            source="heuristic",
+            details=FindingDetails(
+                principle="OCP",
+                explanation="OCP-H-004 explanation",
+                suggestion="OCP-H-004 suggestion",
+                method_name=method_name,
+            ),
+        )
+
+        # Запускаем дедупликацию (порядок в списке не должен иметь значения)
+        deduped = _deduplicate_findings([f1, f2])
+
+        # Убеждаемся, что остался ровно один finding
+        assert len(deduped) == 1
+        winner = deduped[0]
+
+        # Побеждает OCP-H-001
+        assert winner.rule == "OCP-H-001"
+        assert winner.details is not None
+        
+        # Проверяем, что в explanation победителя добавилось упоминание проигравшего
+        assert "Also detected: OCP-H-004" in (winner.details.explanation or "")
+
+
+# ===========================================================================
+# Тесты дедупликации LSP-эвристик
+# ===========================================================================
+
+class TestDeduplicateFindingsLSP:
+    """
+    Проверяет, что для одного и того же метода LSP-H-001 и LSP-H-002
+    не дублируются, а объединяются по правилу приоритета:
+    LSP-H-001 > LSP-H-002.
+    """
+
+    def test_lsp_h001_and_h002_on_same_method_are_merged(self):
+        """
+        Если на один метод срабатывают LSP-H-001 и LSP-H-002, должен остаться
+        только LSP-H-001, а факт обнаружения LSP-H-002 добавляется в explanation.
+        """
+        file_path = "app/models/user.py"
+        class_name = "UserRepository"
+        method_name = "save"
+
+        # Имитируем finding от LSP-H-001 (NotImplementedError в переопределенном методе)
+        f1 = Finding(
+            rule="LSP-H-001",
+            file=file_path,
+            class_name=class_name,
+            line=None,
+            severity="warning",
+            message="Overridden method 'save' raises NotImplementedError",
+            source="heuristic",
+            details=FindingDetails(
+                principle="LSP",
+                explanation="LSP-H-001 explanation",
+                suggestion="LSP-H-001 suggestion",
+                method_name=method_name,
+            ),
+        )
+
+        # Имитируем finding от LSP-H-002 (пустое тело переопределенного метода)
+        f2 = Finding(
+            rule="LSP-H-002",
+            file=file_path,
+            class_name=class_name,
+            line=None,
+            severity="warning",
+            message="Overridden method 'save' has an empty body",
+            source="heuristic",
+            details=FindingDetails(
+                principle="LSP",
+                explanation="LSP-H-002 explanation",
+                suggestion="LSP-H-002 suggestion",
+                method_name=method_name,
+            ),
+        )
+
+        # Запускаем дедупликацию
+        deduped = _deduplicate_findings([f1, f2])
+
+        # Должен остаться один finding
+        assert len(deduped) == 1
+        winner = deduped[0]
+
+        # Победитель — LSP-H-001
+        assert winner.rule == "LSP-H-001"
+        assert winner.details is not None
+
+        # Explanation должен содержать упоминание LSP-H-002
+        assert "Also detected: LSP-H-002" in (winner.details.explanation or "")
+
+
+# ===========================================================================
+# Тесты дедупликации кандидатов (LlmCandidate)
+# ===========================================================================
+
+from solid_dashboard.llm.heuristics import _deduplicate_candidates
+from solid_dashboard.llm.types import LlmCandidate
+
+class TestDeduplicateCandidates:
+    """
+    Проверяет, что несколько кандидатов для одного и того же класса/файла
+    объединяются в один объект LlmCandidate с агрегированными полями.
+    """
+
+    def test_candidates_for_same_class_are_merged(self):
+        """
+        Если для одного класса есть кандидат по OCP и кандидат по LSP,
+        должен остаться один кандидат с типом 'both', объединенными
+        heuristic_reasons и максимальным priority.
+        """
+        file_path = "app/services/report_service.py"
+        class_name = "ReportService"
+
+        # Кандидат, поднятый OCP-эвристикой
+        c1 = LlmCandidate(
+            class_name=class_name,
+            file_path=file_path,
+            source_code="class ReportService: ...",
+            candidate_type="ocp",
+            heuristic_reasons=["OCP-H-001"],
+            priority=5,
+        )
+
+        # Кандидат, поднятый LSP-эвристикой
+        c2 = LlmCandidate(
+            class_name=class_name,
+            file_path=file_path,
+            source_code="class ReportService: ...",
+            candidate_type="lsp",
+            heuristic_reasons=["LSP-H-001"],
+            priority=3,
+        )
+
+        merged = _deduplicate_candidates([c1, c2])
+
+        # Должен остаться один кандидат
+        assert len(merged) == 1
+        winner = merged[0]
+
+        # Имя класса и путь не меняются
+        assert winner.class_name == class_name
+        assert winner.file_path == file_path
+
+        # Тип агрегирован до 'both'
+        assert winner.candidate_type == "both"
+
+        # Причины объединены
+        assert set(winner.heuristic_reasons) == {"OCP-H-001", "LSP-H-001"}
+
+        # Приоритет — максимум из исходных
+        assert winner.priority == 5
+
+

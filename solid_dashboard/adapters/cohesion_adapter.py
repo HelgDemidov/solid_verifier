@@ -1,5 +1,22 @@
+# ===================================================================================================
+# Адаптер связности (Cohesion Adapter)
+#
+# Ключевая роль: Вычисление метрики связности классов (LCOM4 — Lack of Cohesion of Methods)
+# методом полностью самостоятельного статического AST-анализа без внешних зависимостей.
+#
+# Основные архитектурные задачи:
+# 1. Рекурсивный обход целевой директории (target_dir) с соблюдением ignore_dirs.
+# 2. AST-парсинг каждого Python-файла: извлечение классов, методов, атрибутов.
+# 3. Построение графа связности для каждого класса: методы связаны, если делят атрибут
+#    или явно вызывают друг друга (через self.method() или cls.method()).
+# 4. Вычисление LCOM4 через DFS (поиск в глубину) — подсчет количества несвязных компонент в графе методов класса.
+# 5. Агрегация метрик (meanCohesionAll, meanCohesionMultimethod, lowCohesionCount) для формирования сводки отчета пайплайна.
+# ===================================================================================================
+
+
 import ast
 import os
+import logging
 from dataclasses import dataclass, field  # Структуры данных для классов/методов
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -27,13 +44,13 @@ class MethodInfo:
 
 @dataclass
 class ClassInfo:
-    """Информация о классе: основа для расчёта LCOM4."""
+    """Информация о классе: основа для расчета LCOM4."""
     name: str                          # Имя класса (UserService, ArticleRepository, ...)
     filepath: str                      # Абсолютный путь к файлу, где объявлен класс
     lineno: int                        # Строка объявления class
     methods: List[MethodInfo] = field(default_factory=list)
     attributes: Set[str] = field(default_factory=set)
-    # attributes: множество имён полей класса/экземпляра
+    # attributes: множество имен полей класса/экземпляра
     # (уровень класса + self.xxx из __init__)
 
 
@@ -47,18 +64,18 @@ class CohesionAdapter(IAnalyzer):
         return "cohesion"
 
     def run(self, target_dir: str, context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        AST-базированный адаптер для оценки связности классов (LCOM4).
+        # комментарий (ru): параметр context требуется интерфейсом IAnalyzer но не используется здесь
+        _ = context
 
-        Итог:
-        - для каждого класса считаем LCOM4 как число связных компонент графа методов,
-          где вершины = методы (кроме __init__), рёбра = общие атрибуты или вызовы;
-        - формируем агрегированные и помодульные метрики.
-        """
         target_path = Path(target_dir).resolve()
-
-        # Собираем информацию о классах проекта (методы + атрибуты + использования)
-        classes_info: List[ClassInfo] = self._collect_classes(target_path)
+        target_path = Path(target_dir).resolve()
+        
+        # Достаем список игнорируемых папок из конфига
+        ignore_dirs_cfg = config.get("ignore_dirs") or []
+        ignore_dirs = set(name.strip() for name in ignore_dirs_cfg if name and name.strip())
+        
+        # Передаем ignore_dirs в сборщик
+        classes_info: List[ClassInfo] = self._collect_classes(target_path, ignore_dirs)
 
         # Считаем LCOM4 для каждого класса и формируем результирующий список
         class_results: List[Dict[str, Any]] = []
@@ -128,17 +145,14 @@ class CohesionAdapter(IAnalyzer):
     # СБОР КЛАССОВ, МЕТОДОВ И АТРИБУТОВ
     # ================================
 
-    def _collect_classes(self, target_path: Path) -> List[ClassInfo]:
-        """
-        Обходит все .py файлы в target_path и собирает информацию о классах:
-        - имя, файл, строка
-        - методы (включая async/property/classmethod/staticmethod)
-        - атрибуты класса (включая pydantic-/dataclass-поля и self.xxx в __init__)
-        - used_attributes и called_methods для каждого метода
-        """
+    def _collect_classes(self, target_path: Path, ignore_dirs: set) -> List[ClassInfo]:
         classes: List[ClassInfo] = []
 
-        for root, _, files in os.walk(target_path):
+        for root, dirs, files in os.walk(target_path):
+            # Архитектурный трюк: in-place модификация списка dirs 
+            # запрещает os.walk спускаться в игнорируемые директории
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+
             for filename in files:
                 if not filename.endswith(".py"):
                     continue
@@ -146,20 +160,27 @@ class CohesionAdapter(IAnalyzer):
                 file_path = Path(root) / filename
                 try:
                     source = file_path.read_text(encoding="utf-8")
-                except OSError:
-                    continue
+                except OSError as e:
+                    # комментарий (ru): логируем проблему чтения файла вместо тихого пропуска
 
+                    logging.warning(
+                        "CohesionAdapter: cannot read %s: %s", file_path, e
+                    )
+                    continue
                 try:
                     tree = ast.parse(source, filename=str(file_path))
-                except SyntaxError:
-                    # Пропускаем файлы с синтаксическими ошибками
+                except SyntaxError as e:
+                    # комментарий (ru): синтаксически невалидный файл пропускаем с предупреждением
+                    logging.getLogger(__name__).warning(
+                        "CohesionAdapter: syntax error in %s: %s", file_path, e
+                    )
                     continue
 
                 # Проходим по всем классам в файле
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef):
                         class_info = self._build_class_info(node, file_path)
-                        # Сначала соберём self.xxx из __init__, чтобы добавить в attributes
+                        # Сначала соберем self.xxx из __init__, чтобы добавить в attributes
                         self._collect_instance_attributes_from_init(class_info, node)
                         # Затем наполним used_attributes / called_methods
                         self._populate_method_usage(class_info, node)
@@ -269,7 +290,7 @@ class CohesionAdapter(IAnalyzer):
         Примеры:
           foo = 1              -> ["foo"]
           x, y = 1, 2          -> ["x", "y"]
-        Всё, что не является простым Name, игнорируется.
+        Все, что не является простым Name, игнорируется.
         """
         names: List[str] = []
 
@@ -277,7 +298,7 @@ class CohesionAdapter(IAnalyzer):
             # Простое имя: foo = 1
             if isinstance(target, ast.Name):
                 names.append(target.id)
-            # Список имён: x, y = 1, 2
+            # Список имен: x, y = 1, 2
             elif isinstance(target, ast.Tuple):
                 for elt in target.elts:
                     if isinstance(elt, ast.Name):
@@ -375,7 +396,7 @@ class CohesionAdapter(IAnalyzer):
             method_info.called_methods = visitor.called_methods
 
     # ================================
-    # РАСЧЁТ LCOM4
+    # РАСЧЕТ МЕТРИКИ LCOM4
     # ================================
 
     def _compute_lcom4(self, class_info: ClassInfo) -> tuple[int, int]:
@@ -383,17 +404,21 @@ class CohesionAdapter(IAnalyzer):
         Считает LCOM4 для данного класса.
 
         Алгоритм:
-        - Берём только методы, кроме __init__ (по требованиям).
+        - Берем только методы, кроме __init__ (по требованиям).
         - Строим неориентированный граф:
           - вершины = имена методов;
-          - рёбра между методами A и B, если:
+          - ребра между методами A и B, если:
             * used_attributes(A) ∩ used_attributes(B) != ∅, или
             * A вызывает B или B вызывает A.
         - LCOM4 = число связных компонент в этом графе.
         - Если после фильтрации нет методов, возвращаем (0, 0).
         """
-        # Игнорируем __init__ при расчёте LCOM4
-        methods = [m for m in class_info.methods if m.name != "__init__"]
+        # комментарий (ru): исключаем __init__ из расчета (LCOM4-конвенция)
+        # комментарий (ru): также исключаем property-методы - они не участвуют в связности классов
+        methods = [
+            m for m in class_info.methods
+            if m.name != "__init__" and "property" not in m.decorator_kinds
+        ]
 
         methods_count = len(methods)
         if methods_count == 0:
@@ -402,7 +427,7 @@ class CohesionAdapter(IAnalyzer):
         # Инициализируем граф: вершины -> множество соседей
         adjacency: Dict[str, Set[str]] = {m.name: set() for m in methods}
 
-        # 1. Рёбра по общим атрибутам
+        # 1. Ребра по общим атрибутам
         for i, m1 in enumerate(methods):
             for j in range(i + 1, len(methods)):
                 m2 = methods[j]
@@ -412,7 +437,7 @@ class CohesionAdapter(IAnalyzer):
                         adjacency[m1.name].add(m2.name)
                         adjacency[m2.name].add(m1.name)
 
-        # 2. Рёбра по вызовам методов
+        # 2. Ребра по вызовам методов
         name_to_method: Dict[str, MethodInfo] = {m.name: m for m in methods}
         for m in methods:
             for called in m.called_methods:
@@ -420,7 +445,7 @@ class CohesionAdapter(IAnalyzer):
                     adjacency[m.name].add(called)
                     adjacency[called].add(m.name)
 
-        # 3. Подсчёт связных компонент (DFS)
+        # 3. Подсчет связных компонент (DFS)
         visited: Set[str] = set()
         components = 0
 

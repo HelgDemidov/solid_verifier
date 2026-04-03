@@ -45,15 +45,29 @@ def _extract_bases(node: ast.ClassDef) -> List[str]:
     return bases
 
 
+def _is_abstract_method(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """
+    Определяет, помечен ли метод как абстрактный через @abstractmethod.
+
+    Поддерживаем:
+      - @abstractmethod
+      - @abc.abstractmethod
+      - @something.abstractmethod
+    """
+    for dec in func.decorator_list:
+        # @abstractmethod
+        if isinstance(dec, ast.Name) and dec.id == "abstractmethod":
+            return True
+        # @abc.abstractmethod или @foo.abstractmethod
+        if isinstance(dec, ast.Attribute) and dec.attr == "abstractmethod":
+            return True
+    return False
+
+
 def _extract_method_signatures(
     node: ast.ClassDef,
     parent_method_names: Set[str],
 ) -> List[MethodSignature]:
-    """
-    Извлекает сигнатуры всех методов класса (def + async def).
-    is_override = True, если метод с таким именем есть у родителя
-    (parent_method_names передаётся из ProjectMap при 2-м проходе).
-    """
     signatures: List[MethodSignature] = []
 
     for item in node.body:
@@ -69,7 +83,6 @@ def _extract_method_signatures(
                 arg_str += f": {ann}"
             params.append(arg_str)
 
-        # vararg (*args) и kwarg (**kwargs)
         if item.args.vararg:
             params.append(f"*{item.args.vararg.arg}")
         if item.args.kwarg:
@@ -78,12 +91,16 @@ def _extract_method_signatures(
         # --- Тип возврата ---
         return_type = _annotation_to_str(item.returns) if item.returns else "Any"
 
+        # ВАЖНО: флаг абстрактного метода
+        is_abstract = _is_abstract_method(item)
+
         signatures.append(
             MethodSignature(
                 name=item.name,
                 parameters=", ".join(params),
                 return_type=return_type,
                 is_override=item.name in parent_method_names,
+                is_abstract=is_abstract,  # ← этот аргумент должен быть
             )
         )
 
@@ -216,7 +233,7 @@ def build_project_map(files: Sequence[Union[str, Path]]) -> ProjectMap:
                     project_map.interfaces[base].implementations.append(class_name)
 
         # 2b. Пересчитываем is_override для методов
-        # Собираем полное множество имён методов всех родителей
+        # Собираем полное множество имен методов всех родителей
         parent_method_names: Set[str] = set()
         for base in class_info.parent_classes:
             parent_info = project_map.classes.get(base)

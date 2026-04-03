@@ -24,7 +24,7 @@ class LlmError(Exception):
     Базовый тип ошибок LLM-провайдера.
 
     Поля:
-        message: Человекочитаемое описание ошибки (для логов и отчётов).
+        message: Человекочитаемое описание ошибки (для логов и отчетов).
         status_code: HTTP-статус (если известен), иначе None.
 
     Замечание:
@@ -53,11 +53,11 @@ class RetryableError(LlmError):
         - HTTP 5xx (500, 502, 503, 504).
 
     Поведение LlmGateway:
-        - Выполняет до N повторов (по спецификации — ещё 2 попытки)
+        - Выполняет до N повторов (по спецификации — еще 2 попытки)
           с увеличивающимися задержками.
         - Если все попытки исчерпаны, превращает ситуацию в
           LlmUnavailableError (или аналогичный агрегирующий сигнал)
-          на своём уровне.
+          на своем уровне.
     """
     pass
 
@@ -81,20 +81,32 @@ class NonRetryableError(LlmError):
     """
     pass
 
-@dataclass
 class BudgetExhaustedError(LlmError):
     """
-    Токен-бюджет на запуск исчерпан.
+    Доменная ошибка LLM-уровня: токен-бюджет на запуск исчерпан.
 
-    Генерируется Gateway до отправки запроса, если:
-      - уже достигнут или превышен лимит maxtokensperrun;
-      - дальнейший вызов провайдера нарушит бюджет по спецификации.
+    Генерируется Gateway до отправки запроса к провайдеру, если
+    контроллер бюджета сообщает об исчерпании лимита (max_tokens_per_run).
 
-    status_code здесь обычно None, так как ошибка локальная, не HTTP.
+    Это внутренняя ошибка инфраструктуры (Gateway), поэтому HTTP status_code
+    для нее всегда равен None.
     """
 
-    def __init__(self, message: str = "Token budget exhausted", status_code: Optional[int] = None) -> None:
-        super().__init__(message=message, status_code=status_code)
+    def __init__(
+        self,
+        used: int | None = None,
+        limit: int | None = None,
+        message: str | None = None,
+    ) -> None:
+        # Формируем человекочитаемое сообщение по умолчанию
+        if message is None:
+            if used is not None and limit is not None:
+                message = f"Token budget exhausted: used {used} out of {limit} allowed."
+            else:
+                message = "Token budget exhausted before LLM call."
+
+        # status_code всегда None для внутренних ошибок (не HTTP)
+        super().__init__(message=message, status_code=None)
 
 
 @dataclass
@@ -104,7 +116,7 @@ class LlmUnavailableError(LlmError):
 
     Используется Gateway:
       - когда исчерпаны все попытки на RetryableError;
-      - когда в результате деградации сервис остаётся недоступным.
+      - когда в результате деградации сервис остается недоступным.
 
     Это «зонтичная» ошибка для внешнего мира: 
     пайплайн видит, что LLM-сервис временно недоступен.

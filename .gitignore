@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# SOLID Verifier specific artifacts
+.solid-cache/
+report.html
+report.json
+solid_report.log
+cohesion_debug.log
+solid_config.json

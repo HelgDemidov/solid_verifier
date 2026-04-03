@@ -4,21 +4,21 @@
 Реализует identify_candidates() — чистую функцию от ProjectMap к HeuristicResult.
 Не обращается к файловой системе: весь необходимый код уже находится в ProjectMap.
 
-Реализованные эвристики (по нарастанию сложнеости):
-  LSP-H-001 — raise NotImplementedError в переопределённом методе
-  LSP-H-002 — пустое тело переопределённого метода (pass или docstring)
-  OCP-H-001 — цепочки if/elif с isinstance() >= 3 ветвей
-  LSP-H-004 — __init__ без вызова super().__init__()
-  OCP-H-002 — match/case на типах
-  LSP-H-003 — isinstance в коде с параметром базового типа
-  OCP-H-003 — словарь-диспетчер типов
-  OCP-H-004 — высокая цикломатическая сложность + isinstance
+Реализованные эвристики (по нарастанию сложности):
+    LSP-H-001 — raise NotImplementedError в переопределенном методе
+    LSP-H-002 — пустое тело переопределенного метода (pass или docstring)
+    OCP-H-001 — цепочки if/elif с isinstance() >= 3 ветвей
+    LSP-H-004 — __init__ без вызова super().__init__()
+    OCP-H-002 — match/case на типах
+    LSP-H-003 — isinstance в коде с параметром базового типа
+    OCP-H-004 — высокая цикломатическая сложность + isinstance
 
 """
 
 import ast
 import logging
 from typing import List, cast
+from collections import defaultdict
 
 from .types import (
     CandidateType,
@@ -32,10 +32,170 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Приоритеты эвристик при конфликте для одного метода
+_FINDING_PRIORITY: dict[str, int] = {
+    "OCP-H-001": 2,
+    "OCP-H-004": 1,
+    "LSP-H-001": 2,
+    "LSP-H-002": 1,
+}
+
 
 # ---------------------------------------------------------------------------
-# Вспомогательные функции
+# Дефолтные паттерны исключения нерелевантных путей
 # ---------------------------------------------------------------------------
+
+_DEFAULT_EXCLUDE_PATTERNS = [
+    "tests/",
+    "test_",
+    "_test.py",
+    "conftest.py",
+    "migrations/",
+    "__pycache__/",
+    ".venv/",
+    "venv/",
+    "node_modules/",
+    "setup.py",
+    "manage.py",
+]
+
+# ---------------------------------------------------------------------------
+# Вспомогательные функции фильтрации путей
+# ---------------------------------------------------------------------------
+
+def _normalize_path_for_matching(path: str) -> str:
+    # Приводим путь к единому виду для стабильного substring-matching
+    # на Windows/Linux/macOS: слэши унифицируем, регистр понижаем.
+    return path.replace("\\", "/").lower()
+
+
+def _should_exclude_path(
+    file_path: str,
+    exclude_patterns: list[str] | None,
+) -> bool:
+    # Если передан None, используем дефолтный набор паттернов из стратегии.
+    patterns = _DEFAULT_EXCLUDE_PATTERNS if exclude_patterns is None else exclude_patterns
+
+    # Нормализуем путь один раз, чтобы паттерны вида "tests/" работали и
+    # для Windows-путей вроде "C:\\repo\\tests\\test_foo.py".
+    normalized_path = _normalize_path_for_matching(file_path)
+
+    # Нормализуем и паттерны, чтобы матчинг был регистронезависимым и
+    # не зависел от стиля разделителей.
+    for pattern in patterns:
+        normalized_pattern = _normalize_path_for_matching(pattern)
+        if normalized_pattern and normalized_pattern in normalized_path:
+            return True
+
+    return False
+
+
+def _deduplicate_findings(findings: list[Finding]) -> list[Finding]:
+    """Удаляет дублирующиеся findings для одного и того же метода.
+
+    Ключ группировки: (file, class_name, method_name).
+    Внутри группы оставляем finding с максимальным приоритетом.
+    При удалении менее приоритетных добавляем их rule в explanation
+    winning-finding-a.
+    """
+    # Группируем по (file, class_name, method_name)
+    groups: dict[tuple[str, str, str | None], list[Finding]] = defaultdict(list)
+    for f in findings:
+            # Безопасно достаем method_name, даже если details == None
+            method_name: str | None = None
+            if f.details is not None:
+                method_name = f.details.method_name
+
+            key = (f.file, f.class_name or "", method_name)
+            groups[key].append(f)
+
+    result: list[Finding] = []
+
+    for key, group in groups.items():
+        if len(group) == 1:
+            result.append(group[0])
+            continue
+
+        # Ищем победителя по таблице приоритетов
+        def _priority(f: Finding) -> int:
+            return _FINDING_PRIORITY.get(f.rule, 0)
+
+        group_sorted = sorted(group, key=_priority, reverse=True)
+        winner = group_sorted[0]
+        losers = group_sorted[1:]
+
+        # Собираем правила проигравших, чтобы добавить в explanation
+        extra_rules = [f.rule for f in losers if f.rule != winner.rule]
+        if extra_rules and winner.details is not None:
+            suffix = " Also detected: " + ", ".join(sorted(set(extra_rules))) + "."
+
+            # Нормализуем explanation к строке перед конкатенацией
+            base_expl = winner.details.explanation or ""
+            winner.details.explanation = base_expl + suffix
+
+        result.append(winner)
+
+    return result
+
+def _deduplicate_candidates(candidates: list[LlmCandidate]) -> list[LlmCandidate]:
+    """
+    Объединяет LlmCandidate для одного и того же класса/файла.
+
+    Ключ: (file_path, class_name). Для каждого ключа остается один кандидат:
+    - heuristic_reasons объединяются (set-объединение),
+    - priority берется максимальный,
+    - candidate_type агрегируется ("ocp"/"lsp" -> "both" при необходимости).
+    """
+    by_class: dict[tuple[str, str], LlmCandidate] = {}
+
+    for c in candidates:
+        key = (c.file_path, c.class_name)
+        existing = by_class.get(key)
+        if existing is None:
+            by_class[key] = c
+            continue
+
+        # Объединяем причины
+        combined_reasons = sorted(set(existing.heuristic_reasons + c.heuristic_reasons))
+        existing.heuristic_reasons = combined_reasons
+
+        # Приоритет: максимальный
+        existing.priority = max(existing.priority, c.priority)
+
+        # Тип кандидата: агрегируем "ocp"/"lsp"/"both"
+        if existing.candidate_type != c.candidate_type:
+            # Если хотя бы один уже "both" -> оставляем "both"
+            if existing.candidate_type == "both" or c.candidate_type == "both":
+                existing.candidate_type = "both"  # type: ignore[assignment]
+            else:
+                # Один "ocp", другой "lsp" -> итог "both"
+                existing.candidate_type = "both"  # type: ignore[assignment]
+
+    return list(by_class.values())
+
+def _is_abstract_class(class_info: ClassInfo, project_map: ProjectMap) -> bool:
+    """
+    Определяет, является ли класс абстрактным, по данным ProjectMap.
+
+    Условия (достаточно любого):
+      1. Среди parent_classes есть "ABC"
+      2. Имя класса присутствует в project_map.interfaces
+      3. В классе есть хотя бы один метод с is_abstract=True
+    """
+    # 1. Явное наследование от ABC (class Foo(ABC))
+    if "ABC" in class_info.parent_classes:
+        return True
+
+    # 2. Класс объявлен как интерфейс/Protocol в ProjectMap
+    if class_info.name in project_map.interfaces:
+        return True
+
+    # 3. Есть хотя бы один метод, помеченный @abstractmethod
+    if any(m.is_abstract for m in class_info.methods):
+        return True
+
+    return False
 
 def _parse_class_ast(source_code: str, class_name: str) -> ast.ClassDef | None:
     """
@@ -113,19 +273,19 @@ def _iter_method_nodes(func: ast.FunctionDef | ast.AsyncFunctionDef):
     Генератор: обходит все AST-ноды тела метода, НЕ заходя в поддеревья
     вложенных функций, async-функций и вложенных классов.
 
-    Зачем это нужно: стандартный ast.walk() обходит ВСЁ дерево целиком,
+    Зачем это нужно: стандартный ast.walk() обходит ВСе дерево целиком,
     включая вложенные FunctionDef/ClassDef. Это приводит к тому, что if/for/while
     внутри вложенной функции ошибочно увеличивают CC внешнего метода.
 
-    Пример некорректного подсчёта с ast.walk():
+    Пример некорректного подсчета с ast.walk():
         def process(self, x):       # CC должен быть 2 (base=1 + один if)
             if x > 0:               # +1
                 pass
-            def inner(y):           # вложенная функция — не считаем её ноды
+            def inner(y):           # вложенная функция — не считаем ее ноды
                 if y < 0:           # это if НЕ должен влиять на CC process()
                     pass
 
-    ast.walk() посчитал бы CC=3 (оба if). Наш генератор даёт правильное CC=2.
+    ast.walk() посчитал бы CC=3 (оба if). Наш генератор дает правильное CC=2.
 
     Алгоритм: итерируем через ast.iter_child_nodes() вместо ast.walk(),
     при встрече вложенного FunctionDef/AsyncFunctionDef/ClassDef — не рекурсируем
@@ -147,15 +307,15 @@ def _iter_method_nodes(func: ast.FunctionDef | ast.AsyncFunctionDef):
 
         for child in ast.iter_child_nodes(node):
             # Встретили вложенную область видимости (функцию или класс) —
-            # не рекурсируем внутрь: у неё своя CC, это отдельная единица анализа.
+            # не рекурсируем внутрь: у нее своя CC, это отдельная единица анализа.
             # Исключение: сам корневой func — он попал в стек изначально и
             # должен быть обработан. Проверяем по identity (node is not func),
             # чтобы не пропустить корень при первой итерации.
             if child is not func and isinstance(
                 child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
             ):
-                # Саму ноду вложенной функции/класса в стек НЕ кладём —
-                # мы вообще не собираемся её обходить.
+                # Саму ноду вложенной функции/класса в стек НЕ кладем —
+                # мы вообще не собираемся ее обходить.
                 continue
             stack.append(child)
 
@@ -192,7 +352,7 @@ def _compute_method_cc(func: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
             cc += 1
 
         # BoolOp: цепочка `a and b and c` — это n-1 операторов для n операндов.
-        # Каждый and/or создаёт дополнительный путь (short-circuit evaluation).
+        # Каждый and/or создает дополнительный путь (short-circuit evaluation).
         if isinstance(node, ast.BoolOp) and isinstance(node.op, _CC_BOOL_OPS):
             cc += len(node.values) - 1
 
@@ -209,6 +369,7 @@ def _make_finding(
     principle: str,
     explanation: str,
     suggestion: str,
+    method_name: str | None = None,  # NEW
 ) -> Finding:
     """Фабричная функция для создания эвристического Finding."""
     return Finding(
@@ -223,24 +384,30 @@ def _make_finding(
             principle=principle,
             explanation=explanation,
             suggestion=suggestion,
+            method_name=method_name,  # NEW
         ),
     )
 
-
 # ---------------------------------------------------------------------------
-# LSP-H-001: raise NotImplementedError в переопределённом методе
+# LSP-H-001: raise NotImplementedError в переопределенном методе
 # ---------------------------------------------------------------------------
 
 def _check_lsp_h_001(
     class_node: ast.ClassDef,
     class_info: ClassInfo,
+    project_map: ProjectMap,
 ) -> List[Finding]:
     """
-    Ищет переопределённые методы, которые только бросают NotImplementedError.
+    Ищет переопределенные методы, которые только бросают NotImplementedError.
     Это нарушение LSP: вызывающий код не может полагаться на замену базового
     класса подклассом, если последний не реализует контракт.
     """
-    # Множество имён методов, помеченных is_override при Шаге 2
+
+        # NEW: абстрактные классы считаются контрактами, а не нарушениями LSP
+    if _is_abstract_class(class_info, project_map):
+        return []
+    
+    # Множество имен методов, помеченных is_override при Шаге 2
     override_names = {m.name for m in class_info.methods if m.is_override}
     if not override_names:
         return []
@@ -254,7 +421,7 @@ def _check_lsp_h_001(
         if func.name not in override_names:
             continue
 
-        # Обходим всё тело метода в поисках raise NotImplementedError
+        # Обходим все тело метода в поисках raise NotImplementedError
         for node in ast.walk(func):
             if not isinstance(node, ast.Raise):
                 continue
@@ -280,6 +447,7 @@ def _check_lsp_h_001(
                         "Implement the method according to the parent's contract, or "
                         "reconsider whether this class should extend the parent at all."
                     ),
+                    method_name=func.name,  # NEW
                 ))
                 break  # Одного finding на метод достаточно
             if (
@@ -302,6 +470,7 @@ def _check_lsp_h_001(
                     suggestion=(
                         "Implement the method according to the parent's contract."
                     ),
+                    method_name=func.name,  # NEW
                 ))
                 break
 
@@ -309,18 +478,24 @@ def _check_lsp_h_001(
 
 
 # ---------------------------------------------------------------------------
-# LSP-H-002: пустое тело переопределённого метода
+# LSP-H-002: пустое тело переопределенного метода
 # ---------------------------------------------------------------------------
 
 def _check_lsp_h_002(
     class_node: ast.ClassDef,
     class_info: ClassInfo,
+    project_map: ProjectMap,
 ) -> List[Finding]:
     """
-    Ищет переопределённые методы с пустым телом (только pass или docstring).
+    Ищет переопределенные методы с пустым телом (только pass или docstring).
     Пустое тело переопределения — признак того, что подкласс не выполняет
     контракт родителя, нарушая принцип подстановки.
     """
+
+    # NEW: абстрактные классы считаются контрактами, а не нарушениями LSP
+    if _is_abstract_class(class_info, project_map):
+        return []
+
     override_names = {m.name for m in class_info.methods if m.is_override}
     if not override_names:
         return []
@@ -366,6 +541,7 @@ def _check_lsp_h_002(
                     "explicitly if the override is intentionally unsupported (though this "
                     "also violates LSP and should be reconsidered)."
                 ),
+                method_name=func.name,  # NEW
             ))
 
     return findings
@@ -375,20 +551,42 @@ def _check_lsp_h_002(
 # OCP-H-001: цепочки if/elif с isinstance() >= 3 ветвей ИСПРАВЛЕННАЯ ВЕРСИЯ
 # ---------------------------------------------------------------------------
 
+def _count_isinstance_branches(if_node: ast.If) -> int:
+    """
+    Считает количество ветвей if/elif в одной цепочке, 
+    которые содержат вызов isinstance().
+    """
+    count = 0
+    current: ast.If | None = if_node
+
+    while current is not None:
+        # Проверяем текущее условие (test) на наличие isinstance()
+        if _has_isinstance_call(current.test):
+            count += 1
+
+        # Переходим к следующему elif, если он есть
+        if (
+            current.orelse
+            and len(current.orelse) == 1
+            and isinstance(current.orelse[0], ast.If)
+        ):
+            current = current.orelse[0]
+        else:
+            break
+
+    return count
+
 def _check_ocp_h_001(
     class_node: ast.ClassDef,
     class_info: ClassInfo,
 ) -> List[Finding]:
     """
-    Ищет методы с цепочками if/elif, где условие содержит isinstance().
-    Порог: >= 3 ветвей (if + 2 elif).
-
-    Исправление: ast.walk обходит ВСЕ if-ноды в теле метода, включая
-    внутренние elif, которые в AST тоже представлены как ast.If.
-    Чтобы считать длину цепочки только от КОРНЕВОГО if (не от elif внутри),
-    проверяем, что текущая нода не является orelse-дочерней предыдущего if.
-    Реализуем это сбором "вторичных" нод: собираем все if-ноды, которые
-    являются частью orelse — и пропускаем их при обходе.
+    Ищет методы с цепочками if/elif, содержащими >= 3 проверок isinstance().
+    
+    В отличие от старой логики, мы считаем не общую длину цепочки, 
+    а именно количество ветвей, в которых реально вызывается isinstance().
+    Это устраняет ложные срабатывания (когда isinstance только в одной ветке)
+    и ложные пропуски (когда цепочка начинается с обычного guard-условия).
     """
     findings: List[Finding] = []
 
@@ -396,64 +594,98 @@ def _check_ocp_h_001(
         if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
 
-        # Собираем множество нод, которые являются частью elif-цепочки
-        # (т.е. дочерними ast.If внутри orelse другого ast.If).
-        # Эти ноды не являются "корневыми" if — мы их пропускаем.
+        # Собираем ноды, являющиеся внутренними elif
         elif_nodes: set[int] = set()
         for node in ast.walk(func):
             if isinstance(node, ast.If):
-                # Если orelse содержит ровно один If — это elif
                 if (
                     node.orelse
                     and len(node.orelse) == 1
                     and isinstance(node.orelse[0], ast.If)
                 ):
-                    # id() объекта AST-ноды — стабильный идентификатор в рамках одного дерева
                     elif_nodes.add(id(node.orelse[0]))
 
+        # Теперь обходим только корневые if
         for node in ast.walk(func):
             if not isinstance(node, ast.If):
                 continue
 
-            # Пропускаем ноды, которые являются частью elif (не корневой if)
             if id(node) in elif_nodes:
                 continue
 
-            # Проверяем, что хотя бы первая ветвь содержит isinstance()
-            if not _has_isinstance_call(node.test):
-                continue
+            # Считаем именно ветки с isinstance!
+            isinstance_branch_count = _count_isinstance_branches(node)
 
-            chain_length = _count_elif_chain(node)
-
-            if chain_length >= 3:
+            # Если в одной цепочке 3 и более веток с isinstance - это OCP-smell
+            if isinstance_branch_count >= 3:
+                chain_length = _count_elif_chain(node) # Для красивого сообщения оставим
+                
                 findings.append(_make_finding(
                     rule="OCP-H-001",
                     class_info=class_info,
                     message=(
-                        f"Method '{func.name}' contains an isinstance() chain "
-                        f"with {chain_length} branches — potential OCP violation"
+                        f"Method '{func.name}' contains a type-dispatch chain "
+                        f"({isinstance_branch_count} isinstance checks) — potential OCP violation"
                     ),
                     principle="OCP",
                     explanation=(
-                        f"'{func.name}' uses a {chain_length}-branch if/elif chain "
-                        f"with isinstance() checks. Every new type requires modifying "
-                        f"this method directly, violating Open-Closed Principle."
+                        f"'{func.name}' uses an if/elif chain of length {chain_length}, "
+                        f"where {isinstance_branch_count} branches check concrete types via isinstance(). "
+                        f"Mixed type-dispatch like this means adding a new type requires "
+                        f"modifying this method directly, violating Open-Closed Principle."
                     ),
                     suggestion=(
-                        "Consider replacing the isinstance chain with polymorphism: "
+                        "Consider replacing the type-checks with polymorphism: "
                         "extract each branch into a subclass or strategy, and let "
                         "Python's dispatch mechanism handle the routing."
                     ),
+                    method_name=func.name,
                 ))
-                # Одного finding на метод достаточно
                 break
 
     return findings
 
-
 # ---------------------------------------------------------------------------
 # LSP-H-004: __init__ без вызова super().__init__()
 # ---------------------------------------------------------------------------
+
+def _has_dataclass_decorator(class_node: ast.ClassDef) -> bool:
+    """
+    Проверяет, помечен ли класс декоратором @dataclass или @dataclasses.dataclass.
+    На уровне AST декораторы лежат в списке decorator_list класса.
+    """
+    for dec in class_node.decorator_list:
+        # Простой случай: @dataclass
+        if isinstance(dec, ast.Name) and dec.id == "dataclass":
+            return True
+        
+        # Случай с атрибутом: @dataclasses.dataclass
+        if isinstance(dec, ast.Attribute) and dec.attr == "dataclass":
+            return True
+            
+        # Случай с вызовом (когда передают аргументы): @dataclass(frozen=True)
+        if isinstance(dec, ast.Call):
+            # Если вызываемая функция — просто имя: @dataclass(...)
+            if isinstance(dec.func, ast.Name) and dec.func.id == "dataclass":
+                return True
+            # Если вызываемая функция — атрибут: @dataclasses.dataclass(...)
+            if isinstance(dec.func, ast.Attribute) and dec.func.attr == "dataclass":
+                return True
+
+    return False
+
+
+# Родительские классы, для которых отсутствие super().__init__() в подклассе
+# не считается нарушением LSP-H-004
+
+_LSP_H004_EXCLUDED_PARENTS: set[str] = {
+    "object",
+    "ABC",
+    "Protocol",
+    "TypedDict",
+    "NamedTuple",
+    "BaseModel",
+}
 
 def _check_lsp_h_004(
     class_node: ast.ClassDef,
@@ -461,15 +693,20 @@ def _check_lsp_h_004(
 ) -> List[Finding]:
     """
     Ищет __init__ в подклассах без вызова super().__init__().
-    Отсутствие super().__init__() может нарушить инварианты родителя:
-    поля, которые родитель устанавливает при инициализации, не будут
-    инициализированы — нарушение LSP на уровне состояния объекта.
-
-    Проверяем только классы с реальными родителями (не <dynamic>).
     """
-    # Только для реальных подклассов (не standalone и не с динамическими базами)
-    real_parents = [p for p in class_info.parent_classes if p != "<dynamic>"]
+    # NEW: Если это dataclass, отсутствие super().__init__ — это норма,
+    # не считаем это нарушением LSP.
+    if _has_dataclass_decorator(class_node):
+        return []
+
+    # Только для реальных подклассов
+    real_parents = [p for p in class_info.parent_classes if p != ""]
     if not real_parents:
+        return []
+
+    # NEW: если все реальные родители входят в список исключений,
+    # не считаем отсутствие super().__init__() нарушением.
+    if all(parent in _LSP_H004_EXCLUDED_PARENTS for parent in real_parents):
         return []
 
     findings: List[Finding] = []
@@ -481,7 +718,7 @@ def _check_lsp_h_004(
 
         has_super_init = False
 
-        # Обходим всё тело __init__ в поисках вызова super().__init__() или super().__init__
+        # Обходим все тело __init__ в поисках вызова super().__init__() или super().__init__
         for node in ast.walk(func):
             if not isinstance(node, ast.Call):
                 continue
@@ -518,6 +755,7 @@ def _check_lsp_h_004(
                     "statement in __init__, unless you intentionally want to skip "
                     "parent initialization (document this explicitly if so)."
                 ),
+                method_name=func.name,  # NEW
             ))
 
     return findings
@@ -556,7 +794,7 @@ def _check_ocp_h_002(
                 continue
 
             match_node = cast(ast.AST, node)   # тип: AST на уровне Pylance
-            # Ниже мы всё равно обращаемся к .cases, так что уточним тип аккуратнее:
+            # Ниже мы все равно обращаемся к .cases, так что уточним тип аккуратнее:
             # Pylance не знает про ast.Match, поэтому мы не можем указать точный тип,
             # но cast нужен в основном для подавления общей ошибки "у AST нет cases".
 
@@ -593,6 +831,7 @@ def _check_ocp_h_002(
                         "Consider replacing type-dispatch match/case with polymorphism "
                         "or a registration/strategy pattern."
                     ),
+                    method_name=func.name,  # NEW
                 ))
                 break
 
@@ -720,125 +959,12 @@ def _check_lsp_h_003(
                     f"(polymorphic dispatch), so '{func.name}' can call a unified interface "
                     f"without knowing the concrete type."
                 ),
+                method_name=func.name,  # NEW
             ))
             break  # Одного finding на метод достаточно
 
     return findings
 
-
-# ---------------------------------------------------------------------------
-# OCP-H-003: словарь-диспетчер типов
-# ---------------------------------------------------------------------------
-
-def _check_ocp_h_003(
-    class_node: ast.ClassDef,
-    class_info: ClassInfo,
-    project_map: ProjectMap,
-) -> List[Finding]:
-    """
-    Ищет словари, где ключи — это имена классов из ProjectMap (строки или сами типы),
-    а значения — callable (функции/методы/лямбды).
-
-    Пример нарушения OCP:
-        HANDLERS = {
-            "circle": draw_circle,
-            "square": draw_square,
-            "triangle": draw_triangle,
-        }
-
-    или в виде атрибута класса:
-        self._handlers = {
-            CircleEvent: self._handle_circle,
-            SquareEvent: self._handle_square,
-        }
-
-    Словарь-диспетчер — это структурно та же проблема, что и isinstance-цепочка:
-    добавление нового типа требует модификации существующего кода.
-
-    Алгоритм (консервативный):
-    1. Ищем ast.Dict в методах (включая __init__) и в теле класса.
-    2. Проверяем ключи: если >= 3 ключей являются именами классов из ProjectMap
-       (ast.Name с id в known_base_names) — это подозрительный диспетчер.
-    3. Проверяем значения: хотя бы одно должно выглядеть как callable
-       (ast.Name, ast.Attribute, ast.Lambda — не строки, не числа).
-
-    Консервативный порог (>= 3 ключей-типов) снижает ложные срабатывания:
-    словари из 1-2 типов — обычная практика, не запах.
-    """
-    # Собираем все известные имена классов и интерфейсов проекта
-    known_names: set[str] = set(project_map.classes.keys()) | set(project_map.interfaces.keys())
-
-    findings: List[Finding] = []
-
-    # Проверяем как методы, так и тело класса (атрибуты уровня класса)
-    # В тело класса попадают, например, CLASS_HANDLERS = {...}
-    nodes_to_check: list[tuple[str, ast.AST]] = []
-
-    for item in class_node.body:
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # Для методов — ищем dict внутри тела
-            nodes_to_check.append((item.name, item))
-        elif isinstance(item, ast.Assign):
-            # Для атрибутов класса — ищем dict в правой части присваивания
-            nodes_to_check.append(("<class_body>", item))
-
-    for context_name, context_node in nodes_to_check:
-        for node in ast.walk(context_node):
-            if not isinstance(node, ast.Dict):
-                continue
-
-            # --- Считаем ключи, которые являются именами классов из проекта ---
-            type_key_count = 0
-            for key in node.keys:
-                if key is None:
-                    # None как ключ словаря — это **kwargs распаковка, пропускаем
-                    continue
-                # Ключ как имя типа: {Circle: ..., Square: ...}
-                if isinstance(key, ast.Name) and key.id in known_names:
-                    type_key_count += 1
-                # Ключ как строка с именем типа: {"Circle": ..., "Square": ...}
-                # Строковые ключи более спорны, но часто используются в реестрах
-                elif isinstance(key, ast.Constant) and isinstance(key.value, str):
-                    if key.value in known_names:
-                        type_key_count += 1
-
-            if type_key_count < 3:
-                continue  # Недостаточно типовых ключей — не считаем нарушением
-
-            # --- Проверяем, что значения похожи на callable, не на данные ---
-            callable_value_count = sum(
-                1 for v in node.values
-                if v is not None and isinstance(v, (ast.Name, ast.Attribute, ast.Lambda))
-            )
-
-            # Нужно хотя бы 50% callable-значений, чтобы это выглядело как диспетчер
-            if callable_value_count < max(1, type_key_count // 2):
-                continue
-
-            findings.append(_make_finding(
-                rule="OCP-H-003",
-                class_info=class_info,
-                message=(
-                    f"{'Method' if context_name != '<class_body>' else 'Class attribute'} "
-                    f"'{context_name}' contains a type-dispatch dictionary "
-                    f"with {type_key_count} type keys — potential OCP violation"
-                ),
-                principle="OCP",
-                explanation=(
-                    f"A dictionary with {type_key_count} keys that are class names from "
-                    f"this project is used as a type dispatcher. This is structurally "
-                    f"equivalent to an isinstance chain: adding a new type requires "
-                    f"modifying this dictionary."
-                ),
-                suggestion=(
-                    "Consider replacing the dispatch dictionary with a registration "
-                    "mechanism: each type registers its own handler, so the dispatcher "
-                    "never needs to be modified when new types are added."
-                ),
-            ))
-            break  # Одного finding на контекст достаточно
-
-    return findings
 
 # ---------------------------------------------------------------------------
 # OCP-H-004: высокая цикломатическая сложность + isinstance
@@ -862,7 +988,7 @@ def _check_ocp_h_004(
     хотя бы одним вызовом isinstance() внутри.
 
     Это «двойной сигнал» OCP-нарушения:
-    - высокая CC указывает на разветвлённую логику,
+    - высокая CC указывает на разветвленную логику,
     - isinstance() указывает, что ветвление зависит от конкретных типов.
 
     В отличие от OCP-H-001 (цепочка if/elif с isinstance), здесь
@@ -898,10 +1024,9 @@ def _check_ocp_h_004(
 
         # --- Шаг 2: Проверяем наличие isinstance() в теле метода ---
         # Ищем хотя бы один вызов isinstance() в любом месте тела.
-        # В отличие от OCP-H-001, нас не интересует структура цепочки —
-        # достаточно факта присутствия type-check в сложном методе.
+        # Используем _iter_method_nodes, чтобы игнорировать вложенные функции.
         has_isinstance = False
-        for node in ast.walk(func):
+        for node in _iter_method_nodes(func):  # <--- ИСПРАВЛЕНО
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
@@ -934,6 +1059,7 @@ def _check_ocp_h_004(
                 f"or strategy objects. The '{func.name}' method should ideally "
                 f"work with an abstraction, not branch on concrete types."
             ),
+            method_name=func.name,  # NEW
         ))
         # Одного finding на метод достаточно
 
@@ -976,41 +1102,64 @@ def _determine_candidate_type(
     # Класс в иерархии, но без конкретных хитов — отправляем LLM смотреть обе стороны
     return "both" if has_hierarchy else "ocp"
 
-
 # ---------------------------------------------------------------------------
 # Главная публичная функция
 # ---------------------------------------------------------------------------
 
-def identify_candidates(project_map: ProjectMap) -> HeuristicResult:
+def identify_candidates(
+    project_map: ProjectMap,
+    exclude_patterns: list[str] | None = None,
+) -> HeuristicResult:
     """
     Прогоняет все реализованные эвристики по всем классам в ProjectMap.
 
-    Возвращает HeuristicResult:
-    - findings: список Finding с source='heuristic', идут напрямую в отчёт
-    - candidates: список LlmCandidate, отсортированный по приоритету (убывание)
+    Параметры:
+      project_map:
+        Полная карта проекта (классы, иерархия, интерфейсы), собранная
+        на предыдущем шаге пайплайна.
+      exclude_patterns:
+        Список подстрок для исключения путей файлов из эвристического анализа.
+        Если None, используется дефолтный набор _DEFAULT_EXCLUDE_PATTERNS
+        (tests/, migrations/, venv, node_modules и т.п.).
 
-    Является чистой функцией: не обращается к FS, не имеет побочных эффектов.
+    Возвращает HeuristicResult:
+      - findings: список Finding с source='heuristic', идут напрямую в отчет
+      - candidates: список LlmCandidate, отсортированный по приоритету (убывание)
+
+    Функция остается чистой: не обращается к файловой системе и не имеет
+    побочных эффектов. Вся информация берется из ProjectMap и параметров.
     """
+    # Собираем все эвристические находки по проекту
     all_findings: List[Finding] = []
+    # Собираем кандидатов для LLM, будем сортировать и дедуплицировать в конце
     candidates: List[LlmCandidate] = []
 
     for class_name, class_info in project_map.classes.items():
-
-        # Классы с динамическими базами пропускаем — эвристики на них ненадёжны
-        if "<dynamic>" in class_info.parent_classes:
+        # --- Грубая фильтрация нерелевантных путей (Решение 6) ---
+        # На этом шаге отсекаем тесты, миграции, venv, node_modules и т.д.
+        # Важно делать это ДО AST-парсинга и ДО запуска эвристик, чтобы
+        # не тратить время на заведомо нецелевые файлы и не генерировать шум.
+        if _should_exclude_path(class_info.file_path, exclude_patterns):
             continue
 
-        # Парсим AST из source_code, который был сохранён при Шаге 0 (buildProjectMap)
+        # Классы с динамическими базами пропускаем — эвристики на них ненадежны
+        if "" in class_info.parent_classes:
+            continue
+
+        # Парсим AST из source_code, который был сохранен при Шаге 0 (buildProjectMap)
         class_node = _parse_class_ast(class_info.source_code, class_name)
         if class_node is None:
+            # Если по какой-то причине парсинг не удался, просто пропускаем класс
             continue
 
-        # --- Прогон эвристик ---
+        # --- Прогон эвристик для одного класса ---
         class_findings: List[Finding] = []
 
-        # LSP-эвристики (требуют is_override-информации из Шага 2)
-        class_findings.extend(_check_lsp_h_001(class_node, class_info))
-        class_findings.extend(_check_lsp_h_002(class_node, class_info))
+        # LSP-эвритстики:
+        # LSP-H-001 и LSP-H-002 теперь используют project_map, чтобы
+        # отличать абстрактные классы от конкретных (Решение 2).
+        class_findings.extend(_check_lsp_h_001(class_node, class_info, project_map))
+        class_findings.extend(_check_lsp_h_002(class_node, class_info, project_map))
         class_findings.extend(_check_lsp_h_004(class_node, class_info))
 
         # OCP-эвристики без доступа к ProjectMap
@@ -1023,12 +1172,10 @@ def identify_candidates(project_map: ProjectMap) -> HeuristicResult:
         # потому что isinstance там не в цепочке, а в смешанном сложном методе.
         class_findings.extend(_check_ocp_h_004(class_node, class_info))
 
-        # Эвристики, которым нужен ProjectMap для проверки типов
+        # Эвристики, которым нужен ProjectMap для проверки типов (LSP-H-003)
         class_findings.extend(_check_lsp_h_003(class_node, class_info, project_map))
-        class_findings.extend(_check_ocp_h_003(class_node, class_info, project_map))
 
-        # ИСПРАВЛЕНИЕ: добавляем findings текущего класса в общий список
-        # Эта строка отсутствовала — из-за чего result.findings всегда был []
+        # Копим все findings по проекту для последующей дедупликации (Решение 3)
         all_findings.extend(class_findings)
 
         # --- Определение: является ли класс кандидатом для LLM ---
@@ -1037,9 +1184,9 @@ def identify_candidates(project_map: ProjectMap) -> HeuristicResult:
             or len(class_info.implemented_interfaces) > 0
         )
 
-        # Кандидат — класс с хоть одним finding ИЛИ в иерархии
+        # Кандидат — это класс с хотя бы одним эвристическим попаданием
+        # ИЛИ любой класс, участвующий в иерархии (чтобы LLM посмотрел на контекст).
         is_candidate = bool(class_findings) or has_hierarchy
-
         if not is_candidate:
             continue
 
@@ -1050,23 +1197,35 @@ def identify_candidates(project_map: ProjectMap) -> HeuristicResult:
         has_lsp = any("LSP" in r for r in reasons)
         candidate_type = _determine_candidate_type(has_ocp, has_lsp, has_hierarchy)
 
+        # Глубина наследования и количество интерфейсов влияют на приоритет
         depth = len([p for p in class_info.parent_classes if p != ""])
         interface_count = len(class_info.implemented_interfaces)
         priority = _compute_priority(reasons, depth, interface_count)
 
-        candidates.append(LlmCandidate(
-            class_name=class_name,
-            file_path=class_info.file_path,
-            source_code=class_info.source_code,
-            candidate_type=candidate_type,
-            heuristic_reasons=reasons,
-            priority=priority,
-        ))
+        candidates.append(
+            LlmCandidate(
+                class_name=class_name,
+                file_path=class_info.file_path,
+                source_code=class_info.source_code,
+                candidate_type=candidate_type,
+                heuristic_reasons=reasons,
+                priority=priority,
+            )
+        )
+
+    # NEW: дедупликация кандидатов по (file_path, class_name) (Решение 3)
+    # Объединяем heuristic_reasons и оставляем кандидат с максимальным приоритетом.
+    candidates = _deduplicate_candidates(candidates)
 
     # Сортируем кандидатов: наибольший приоритет — первым
     candidates.sort(key=lambda c: c.priority, reverse=True)
 
+    # NEW: дедупликация findings по (file, class, method) (Решение 3)
+    # При конфликте OCP-H-001 vs OCP-H-004 и LSP-H-001 vs LSP-H-002
+    # оставляем более специфичное правило и дописываем explanation.
+    deduped_findings = _deduplicate_findings(all_findings)
+
     return HeuristicResult(
-        findings=all_findings,
+        findings=deduped_findings,
         candidates=candidates,
     )

@@ -1,32 +1,39 @@
+# ---------------------------------------------------------------------------
+# LLM Layer Factory & Dependency Injection
+# ---------------------------------------------------------------------------
+# Фабрика сборки LLM-слоя:
+# Изолирует логику создания графа объектов (Provider -> Cache -> Budget -> Gateway -> Adapter) от основного пайплайна
+# Принимает конфигурацию (LlmConfig), валидирует ее по принципу fail-fast и возвращает готовый фасад (LlmSolidAdapter) 
+# Гарантирует, что ни пайплайн, ни сам адаптер не занимаются инстанцированием инфраструктурных зависимостей
+
+
 from __future__ import annotations
 
 import logging
 
-from .budget import TokenBudgetController  # noqa: F401
-from .cache import FileCache               # noqa: F401
-from .errors import NonRetryableError      # noqa: F401
-from .gateway import LlmGateway            # noqa: F401
-from .llm_adapter import LlmSolidAdapter   # noqa: F401
-from .provider import OpenAiProvider       # noqa: F401
-from .types import LlmConfig               # noqa: F401
+from .budget import TokenBudgetController  
+from .cache import FileCache               
+from .errors import NonRetryableError      
+from .gateway import LlmGateway            
+from .llm_adapter import LlmSolidAdapter   
+from .provider import OpenRouterProvider       
+from .types import LlmConfig               
 
 logger = logging.getLogger(__name__)
 
 # Константы для будущих провайдеров
-_SUPPORTED_PROVIDERS = frozenset({"openai"})
+_SUPPORTED_PROVIDERS = frozenset({"openrouter"})
 
 
 def create_llm_adapter(config: LlmConfig) -> LlmSolidAdapter:
     """
-    Публичная точка сборки всего LLM-стека.
-
-    Пайплайн вызывает именно эту функцию и получает готовый адаптер.
+    Публичная точка сборки всего LLM-стека: пайплайн вызывает именно эту функцию и получает готовый адаптер
     Ни пайплайн, ни адаптер не знают о конкретных классах инфраструктуры.
 
     Цепочка сборки:
         LlmConfig
             → _validate_config(config)          # fail-fast
-            → OpenAiProvider(api_key, endpoint)  # Transport Layer
+            → OpenRouterProvider(api_key, endpoint)  # Transport Layer
             → FileCache(cache_dir)               # Кэш
             → TokenBudgetController(max_tokens)  # Бюджет
             → LlmGateway(provider, cache, budget)
@@ -41,8 +48,6 @@ def create_llm_adapter(config: LlmConfig) -> LlmSolidAdapter:
 def _validate_config(config: LlmConfig) -> None:
     """
     Fail-fast валидация LlmConfig при старте.
-
-    По v13_FINAL таблица деградации: если LLM enabled и нет api_key
     (для не-Ollama провайдеров) — это ошибка конфигурации, пайплайн
     должен остановиться немедленно, не ждать первого вызова к API.
     """
@@ -55,25 +60,20 @@ def _validate_config(config: LlmConfig) -> None:
             status_code=None,
         )
 
-    # Ollama работает без ключа — для неё api_key необязателен
-    _requires_api_key = config.provider != "ollama"
-    if _requires_api_key and not config.api_key:
+    if not config.api_key:
         raise NonRetryableError(
             message=(
-                f"LLM provider '{config.provider}' requires api_key, "
-                "but it is not configured. "
-                "Set apiKey in .solid-analyzer.yml or via environment variable."
+                f"LLM provider '{config.provider}' requires an API key, but it is empty."
+                f"Please set OPENROUTER_API_KEY in your .env file or pass it via environment variables."
             ),
             status_code=None,
         )
 
 
 def _create_gateway(config: LlmConfig) -> LlmGateway:
-    """
-    Внутренняя сборка LlmGateway из LlmConfig.
 
-    Не экспортируется наружу — пайплайн использует только create_llm_adapter().
-    """
+    # Внутренняя сборка LlmGateway из LlmConfig
+    # Не экспортируется наружу — пайплайн использует только create_llm_adapter()
     provider = _create_provider(config)
     cache = FileCache(cache_dir=config.cache_dir)
     budget = TokenBudgetController(max_tokens=config.max_tokens_per_run)
@@ -84,16 +84,12 @@ def _create_gateway(config: LlmConfig) -> LlmGateway:
         budget=budget,
     )
 
+def _create_provider(config: LlmConfig) -> OpenRouterProvider:
 
-def _create_provider(config: LlmConfig) -> OpenAiProvider:
-    """
-    Создаёт провайдер в зависимости от config.provider.
-
-    Сейчас поддерживается только OpenAI; Ollama/Anthropic — Шаг 7.
-    Единственная точка, где упоминаются конкретные классы провайдеров.
-    """
-    if config.provider == "openai":
-        return OpenAiProvider(
+    # Создает провайдер в зависимости от config.provider
+    # Единственная точка, где упоминаются конкретные классы провайдеров (сейчас поддерживается только OpenRouter)
+    if config.provider == "openrouter":
+        return OpenRouterProvider(
             api_key=config.api_key,
             endpoint=config.endpoint,
             # timeout оставляем дефолтным из провайдера:

@@ -1,3 +1,19 @@
+# ===================================================================================================
+# Адаптер Import Linter (Import Linter Adapter)
+# 
+# Ключевая роль: Проверка строгих архитектурных контрактов (API Layered Architecture) с использованием утилиты import-linter.
+# 
+# Основные архитектурные задачи:
+# 1. Динамическая генерация временного конфига (.importlinter_auto) на основе 
+#    базового файла .importlinter и актуального списка слоев из solid_config.json.
+# 2. Изолированный запуск import-linter CLI в подпроцессе с передачей правильного 
+#    контекста (PYTHONPATH), охватывающего директорию анализа.
+# 3. Применение фильтра ignore_dirs (настройка ignore_imports) для исключения инфраструктурного кода из архитектурных проверок.
+# 4. Парсинг текстового вывода линтера (ANSI-очистка) для подсчета нарушенных/
+#    соблюденных контрактов и извлечения списка конкретных нарушений.
+# ===================================================================================================
+
+
 import os  # работа с путями и файлами
 import re  # разбор текста и ANSI-кодов
 import subprocess  # запуск lint-imports как отдельного процесса
@@ -10,84 +26,81 @@ ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 
 class ImportLinterAdapter(IAnalyzer):
-    """
-    Адаптер для вызова import-linter через стабильный CLI (lint-imports).
-    Вместо полного автогенерирования конфига:
-    - читает существующий .importlinter
-    - обновляет только блок слоёв в контракте типа 'layers' по данным из solidconfig.json
-    - сохраняет результат во временный .importlinter_auto
-    - запускает lint-imports --config .importlinter_auto
-    """
+    # Синхронизирует базовый конфигурационный файл .importlinter с единой моделью solid_config.json:
+    # - Читает существующий базовый файл .importlinter
+    # - Динамически перезаписывает параметр root_packages под целевую директорию (package_name)
+    # - Обновляет архитектурный контракт (блок 'layers') актуальными слоями проекта.
+    # - Автоматически генерирует правила ignore_imports для исключения папок из ignore_dirs
+    # - Сохраняет результат во временный файл (например, .importlinter_auto_app)
+    # - Запускает lint-imports --config <temp_file> и безопасно удаляет его после работы
 
     @property
     def name(self) -> str:
-        # Имя адаптера для JSON-отчёта
+        # Имя адаптера для JSON-отчета
         return "import_linter"
 
     def run(self, target_dir: str, context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
-        # Абсолютный путь до анализируемого пакета (например, .../scopus_search_code/app)
+        # комментарий (ru): параметр context требуется интерфейсом
+        _ = context
+
         target_path = os.path.abspath(target_dir)
-        # Корень репозитория (папка, где лежит .importlinter, pyproject, tools, app и т.п.)
         project_root = os.path.dirname(target_path)
+        # Извлекаем реальное имя пакета (например 'app' или 'src')
+        package_name = os.path.basename(target_path)
 
-        # Пути к "боевому" и временному конфигам import-linter
         base_config_path = os.path.join(project_root, ".importlinter")
-        temp_config_path = os.path.join(project_root, ".importlinter_auto")
+        # Делаем имя временного файла уникальным для предотвращения коллизий
+        temp_config_path = os.path.join(project_root, f".importlinter_auto_{package_name}")
 
-        # Проверяем, что базовый конфиг существует (иначе смысла продолжать нет)
         if not os.path.exists(base_config_path):
             return self._error_message(f".importlinter not found at {base_config_path}")
 
         try:
-            # 1. Читаем базовый .importlinter и обновляем в нём блок слоёв
-            self._generate_synced_config(
+            # Извлекаем ignore_dirs
+            ignore_dirs_cfg = config.get("ignore_dirs") or []
+            ignore_dirs = [d.strip() for d in ignore_dirs_cfg if d and d.strip()]
+
+            # Передаем package_name и ignore_dirs в генератор
+            self.generate_synced_config(
                 base_config_path=base_config_path,
                 solid_config=config,
-                out_path=temp_config_path,
+                outpath=temp_config_path,
+                package_name=package_name,
+                ignore_dirs=ignore_dirs
             )
 
-            # 2. Готовим окружение: добавляем root проекта в PYTHONPATH только для дочернего процесса
             env = os.environ.copy()
             if "PYTHONPATH" in env:
                 env["PYTHONPATH"] = f"{project_root}{os.pathsep}{env['PYTHONPATH']}"
             else:
                 env["PYTHONPATH"] = project_root
 
-            # 3. Запускаем import-linter через CLI
             cmd = ["lint-imports", "--config", temp_config_path]
-
             completed = subprocess.run(
                 cmd,
-                cwd=project_root,   # работаем из корня репо — как ты запускаешь вручную
-                env=env,            # проброс корректного PYTHONPATH
+                cwd=project_root,
+                env=env,
                 capture_output=True,
                 text=True,
                 check=False,
             )
 
-            # Склеиваем stdout и stderr и чистим ANSI-коды
-            raw_console = (completed.stdout or "") + "\n" + (completed.stderr or "")
+            raw_console = completed.stdout or completed.stderr or ""
             clean_output = ANSI_ESCAPE.sub("", raw_console).strip()
 
-            # Допустимыми считаем только коды 0 (KEPT) и 1 (BROKEN)
             if completed.returncode not in (0, 1):
                 return self._error_message(
                     f"lint-imports exited with code {completed.returncode}.\n{clean_output}"
                 )
 
             linting_passed = (completed.returncode == 0)
-
-            # 4. Парсим агрегированные статистики (Contracts X kept, Y broken)
             kept, broken = self._parse_contract_stats(clean_output, linting_passed)
 
-            # 5. Собираем список нарушенных контрактов (по строкам с маркером BROKEN)
             violations: List[str] = []
             for line in clean_output.splitlines():
                 stripped = line.strip()
-                # Import-linter обычно выводит "Contract Name BROKEN"
-                if stripped.endswith("BROKEN"):
-                    # Отрезаем суффикс "BROKEN" и лишние пробелы
-                    name_part = stripped[: -len("BROKEN")].rstrip()
+                if stripped.endswith(" BROKEN"):
+                    name_part = stripped[:-len(" BROKEN")].rstrip()
                     if name_part:
                         violations.append(name_part)
 
@@ -99,110 +112,101 @@ class ImportLinterAdapter(IAnalyzer):
                 "violations": violations,
                 "raw_output": clean_output,
             }
-
         except FileNotFoundError:
-            # Команда lint-imports не найдена в PATH/venv
             return self._error_message(
-                "Command 'lint-imports' not found. Ensure import-linter is installed in the active virtual environment."
+                "Command lint-imports not found. Ensure import-linter is installed."
             )
         except Exception as exc:
-            # Любая непредвиденная ошибка адаптера
             return self._error_message(f"ImportLinterAdapter failed: {exc}")
         finally:
-            # Аккуратно удаляем временный конфиг, если он был создан
             if os.path.exists(temp_config_path):
                 try:
                     os.remove(temp_config_path)
                 except OSError:
                     pass
 
-    def _generate_synced_config(
-        self,
-        base_config_path: str,
-        solid_config: Dict[str, Any],
-        out_path: str,
+    def generate_synced_config(
+        self, 
+        base_config_path: str, 
+        solid_config: Dict[str, Any], 
+        outpath: str,
+        package_name: str,
+        ignore_dirs: List[str]
     ) -> None:
         """
-        Читает существующий .importlinter и обновляет только блок `layers:` в контракте типа `layers`,
-        используя список ключей `layers` из solidconfig.json.
-
-        Это устраняет дублирование и сохраняет рабочие root_packages и прочие настройки.
+        Читает базовый .importlinter, заменяет root_packages на package_name, 
+        заменяет слои на слои из solid_config, добавляет ignore_imports и сохраняет в outpath.
         """
-        # Читаем оригинальный конфиг построчно
         with open(base_config_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-        # Получаем список слоёв из solidconfig.json
         layer_config: Dict[str, Any] = solid_config.get("layers", {})
         layer_names = list(layer_config.keys())
 
         if not layer_names:
-            # Если слои не заданы, просто копируем исходный файл без изменений
-            with open(out_path, "w", encoding="utf-8") as f:
+            with open(outpath, "w", encoding="utf-8") as f:
                 f.writelines(lines)
             return
 
         result_lines: List[str] = []
-        in_layers_contract = False  # находимся ли мы внутри нужного контракта
-        in_layers_block = False     # находимся ли мы внутри блока "layers:" конкретного контракта
+        in_layers_contract = False
+        in_layers_block = False
 
         for line in lines:
             stripped = line.strip()
 
-            # Находим начало секции контракта типа layers
+            # комментарий (ru): динамически перезаписываем root_packages под пакет из пайплайна
+            if stripped.startswith("root_packages"):
+                result_lines.append(f"root_packages = {package_name}\n")
+                continue
+
             if stripped.startswith("[importlinter:contract:") and not in_layers_contract:
-                # Пробрасываем сам заголовок секции
                 result_lines.append(line)
                 in_layers_contract = True
                 in_layers_block = False
                 continue
 
             if in_layers_contract:
-                # Проверяем, указано ли type = layers
-                if stripped.lower().startswith("type") and "layers" not in stripped.lower():
-                    # Это не тот контракт, который нас интересует — выходим из режима
+                if stripped.lower().startswith("type ") and "layers" not in stripped.lower():
                     result_lines.append(line)
                     in_layers_contract = False
                     in_layers_block = False
                     continue
 
-                # Находим строку "layers:" — именно здесь мы будем подменять содержимое
                 if stripped.lower().startswith("layers:"):
-                    # Записываем сам заголовок блока слоёв
                     result_lines.append("layers:\n")
-                    # Далее — добавляем слои из solidconfig.json (по одному на строку с отступом)
                     for layer in layer_names:
-                        result_lines.append(f"    {layer}\n")
-                    # Переходим в режим "внутри блока слоёв" — остальные старые слои будем пропускать
+                        result_lines.append(f"    {package_name}.{layer}\n")
+                    
+                    # комментарий (ru): добавляем ignore_imports для игнорируемых директорий
+                    if ignore_dirs:
+                        result_lines.append("\nignore_imports:\n")
+                        for d in ignore_dirs:
+                            result_lines.append(f"    {package_name}.{d}.* -> *\n")
+                            result_lines.append(f"    * -> {package_name}.{d}.*\n")
+                            
                     in_layers_block = True
                     continue
 
-                # Если мы внутри блока "layers:", пропускаем старые строки слоёв, пока не встретим новую секцию
                 if in_layers_block:
-                    if stripped.startswith("[importlinter:contract:") or stripped.startswith("[importlinter]"):
-                        # Это начало новой секции — выходим из блока и обрабатываем эту строку как новую секцию
+                    if stripped.startswith("[importlinter:contract:") or stripped.startswith("[importlinter:"):
                         in_layers_contract = stripped.startswith("[importlinter:contract:")
                         in_layers_block = False
                         result_lines.append(line)
-                    # Если это просто старые строки слоёв — пропускаем их (уже заменили)
                     continue
 
-                # Если мы внутри нужного контракта, но не в блоке слоёв — просто копируем строки
                 result_lines.append(line)
-                # Если встретим новую секцию контракта, выходим из режима
-                if stripped.startswith("[importlinter:contract:") and not stripped.lower().startswith("layers"):
+                if stripped.startswith("[importlinter:contract:") and not stripped.lower().startswith("layers:"):
                     in_layers_contract = False
                     in_layers_block = False
-                continue
+                    continue
+            else:
+                result_lines.append(line)
 
-            # Всё, что вне нужного контракта — копируем без изменений
-            result_lines.append(line)
-
-        # Если вдруг контракт с type = layers не найден — просто копируем исходный файл
         if not result_lines:
             result_lines = lines
 
-        with open(out_path, "w", encoding="utf-8") as f:
+        with open(outpath, "w", encoding="utf-8") as f:
             f.writelines(result_lines)
 
     @staticmethod

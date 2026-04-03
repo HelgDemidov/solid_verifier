@@ -6,7 +6,7 @@
 
 import pytest
 
-from tools.solid_verifier.solid_dashboard.llm.types import (
+from solid_dashboard.llm.types import (
     MethodSignature,
     ClassInfo,
     InterfaceInfo,
@@ -82,8 +82,8 @@ def llm_candidate():
 @pytest.fixture
 def llm_config():
     return LlmConfig(
-        provider="openai",
-        model="gpt-4o-mini",
+        provider="openrouter",
+        model="openai/gpt-4o-mini",
         api_key="test-key",
         endpoint=None,
         max_tokens_per_run=50000,
@@ -100,6 +100,7 @@ class TestMethodSignature:
     def test_basic_creation(self, method_sig):
         assert method_sig.name == "process"
         assert method_sig.is_override is False
+        assert method_sig.is_abstract is False
 
     def test_override_flag(self):
         sig = MethodSignature(
@@ -109,6 +110,7 @@ class TestMethodSignature:
             is_override=True,
         )
         assert sig.is_override is True
+        assert sig.is_abstract is False  # NEW
 
 
 class TestClassInfo:
@@ -204,7 +206,7 @@ class TestHeuristicResult:
 
 class TestLlmConfig:
     def test_basic_creation(self, llm_config):
-        assert llm_config.provider == "openai"
+        assert llm_config.provider == "openrouter"
         assert llm_config.api_key == "test-key"
         assert llm_config.endpoint is None
 
@@ -228,7 +230,6 @@ class TestLlmAnalysisInput:
         inp = LlmAnalysisInput(
             project_map=project_map,
             candidates=[llm_candidate],
-            config=llm_config,
         )
         assert len(inp.candidates) == 1
         # Убеждаемся, что static findings в контракте отсутствуют
@@ -345,8 +346,42 @@ class TestFindingDetails:
         assert fd.suggestion is None
         assert fd.analyzed_with is None
         assert fd.heuristic_corroboration is None
+        assert fd.method_name is None  # NEW: дефолт для нового поля
 
     def test_partial_fill(self):
         fd = FindingDetails(principle="LSP", heuristic_corroboration=True)
         assert fd.principle == "LSP"
         assert fd.suggestion is None
+        assert fd.method_name is None  # NEW: дефолт для нового поля
+
+# LДобавляем тесты на иммутабельность LlmResponse и базовую инстанциацию ParseResult
+
+from dataclasses import FrozenInstanceError
+import pytest
+from solid_dashboard.llm.types import LlmResponse, ParseResult
+
+def test_llm_response_is_immutable():
+    """Тест контракта ACL-A: LlmResponse должен быть заморожен (frozen=True)."""
+    response = LlmResponse(content="test", tokens_used=10, model="openai/gpt-4o-mini")
+    
+    with pytest.raises(FrozenInstanceError):
+        response.content = "new content"  # type: ignore
+        
+    with pytest.raises(FrozenInstanceError):
+        response.tokens_used = 20  # type: ignore
+
+def test_llm_response_defaults():
+    """Тест дефолтных значений LlmResponse."""
+    response = LlmResponse(content="test", tokens_used=10)
+    assert response.model == ""
+
+def test_parse_result_instantiation():
+    """Тест контракта ACL-B: ParseResult корректно инстанциируется."""
+    result = ParseResult(
+        findings=[],
+        warnings=["Some warning"],
+        status="failure"
+    )
+    assert result.status == "failure"
+    assert len(result.warnings) == 1
+    assert result.findings == []

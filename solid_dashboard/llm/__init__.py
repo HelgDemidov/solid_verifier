@@ -15,6 +15,9 @@ from .types import (
     SourceType,
     CandidateType,
     SeverityLevel,
+    LlmResponse,
+    ParseStatus,
+    ParseResult
 )
 
 __all__ = [
@@ -33,6 +36,9 @@ __all__ = [
     "SourceType",
     "CandidateType",
     "SeverityLevel",
+    "LlmResponse", 
+    "ParseStatus", 
+    "ParseResult"
 ]
 
 from .ast_parser import build_project_map

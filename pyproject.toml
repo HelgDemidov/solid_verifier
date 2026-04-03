@@ -1,35 +1,54 @@
-# комментарий (ru): Файл конфигурации сборки проекта
+# Project build configuration
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "solid_dashboard"
+name = "solid-verifier"
 version = "0.1.0"
-description = "Python Code Inventory & Architecture Dashboard"
+description = "Config-driven CLI tool for verifying Python projects against SOLID principles and layered architecture"
+readme = "README.md"
 requires-python = ">=3.10"
 
-# Нижние границы >= cовпадают с локально установленными версиями
-# Верхние границы <X.0.0 страхуют от мажорных изменений API
-# Позднее в dependencies необходимо будет добавить openai 
-
+# Main runtime dependencies of the tool
 dependencies = [
     # Block 1 — static metrics
     "radon>=6.0.1,<7.0.0",
-    "cohesion>=1.2.0,<2.0.0",
+    "lizard==1.17.10",
 
     # Block 2 — architecture contracts & graphs
-    "import-linter>=2.11,<3.0.0", # изначально была жесткая привязка к версии 3 2.2.2 из-за использования Python API
-    "pyan3>=2.2.2,<3.0.0", # адаптер pyan3222
-    "networkx>=3.0.0,<4.0.0", # также для адаптера pyan3222
+    "import-linter==2.11", 
+    "grimp>=2.3.0,<3.0.0", # grimp (the import-linter engine) is also used directly
+    "pyan3>=2.2.2,<3.0.0",
+    "networkx>=3.0.0,<4.0.0",
 
     # Block 3 — core & reporting
-    "pydantic>=2.12.5,<3.0.0",
-    "Jinja2>=3.1.6,<4.0.0",
+    "pydantic>=2.0.0,<3.0.0",
+    "Jinja2>=3.1.0,<4.0.0",
 
-    # Block 4 - HTTP client
-    "httpx>=0.24.0",
+    # Block 4 - HTTP client & environment loading
+    "httpx>=0.24.0,<1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
 ]
 
+# Add later for PyPI publication:
+# authors = [{ name = "YOUR_NAME", email = "user@example.com" }]
+# license = { text = "Proprietary" }
+# classifiers = [
+#     "Programming Language :: Python :: 3",
+#     "Programming Language :: Python :: 3.10",
+#     "Programming Language :: Python :: 3.11",
+#     "Programming Language :: Python :: 3.12",
+#     "Operating System :: OS Independent",
+# ]
+
 [project.scripts]
-solid-dashboard = "solid_dashboard.__main__:main"
+solid-dashboard = "solid_dashboard.main:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["solid_dashboard", "solid_dashboard.*"]
+exclude = ["tests", "tests.*"]

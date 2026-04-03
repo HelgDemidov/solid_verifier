@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.solid_verifier.solid_dashboard.llm.ast_parser import build_project_map
+from solid_dashboard.llm.ast_parser import build_project_map
 
 
 # ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ from tools.solid_verifier.solid_dashboard.llm.ast_parser import build_project_ma
 
 @pytest.fixture
 def tmp_project(tmp_path):
-    """Возвращает фабрику, которая создаёт .py-файлы во временной директории."""
+    """Возвращает фабрику, которая создает .py-файлы во временной директории."""
     def _write(filename: str, source: str) -> str:
         path = tmp_path / filename
         path.write_text(textwrap.dedent(source), encoding="utf-8")
@@ -429,7 +429,7 @@ def test_integration_5_to_10_files_project(tmp_project):
                 self.repo = PostgresRepo()
     """)
     
-    # Запускаем парсер на всём проекте (6 файлов)
+    # Запускаем парсер на всем проекте (6 файлов)
     pm = build_project_map([f1, f2, f3, f4, f5, f6])
     
     # 1. Проверяем интерфейсы (из interfaces.py)

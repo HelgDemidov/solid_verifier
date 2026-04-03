@@ -22,7 +22,7 @@ SourceType = Literal["static", "heuristic", "llm"]
 # Принцип-кандидат для LLM-анализа
 CandidateType = Literal["ocp", "lsp", "both"]
 
-# Уровень серьёзности finding
+# Уровень серьезности finding
 SeverityLevel = Literal["error", "warning", "info"]
 
 
@@ -34,15 +34,15 @@ SeverityLevel = Literal["error", "warning", "info"]
 class MethodSignature:
     """Сигнатура метода класса (без тела)."""
     name: str
-    parameters: str        # строка параметров, например: "self, value: int"
-    return_type: str       # строка аннотации возврата, например: "str | None"
-    is_override: bool      # True, если метод переопределяет метод родителя
-
+    parameters: str                 # строка параметров, например: "self, value: int"
+    return_type: str | None        # строка аннотации возврата, например: "str | None"
+    is_override: bool = False       # True, если метод переопределяет метод родителя
+    is_abstract: bool = False       # NEW: метод помечен как абстрактный (@abstractmethod)
 
 @dataclass
 class ClassInfo:
     """
-    Полная информация о классе, извлечённая из AST.
+    Полная информация о классе, извлеченная из AST.
     source_code — полный исходный текст блока class, включая тело.
     """
     name: str
@@ -70,7 +70,7 @@ class InterfaceInfo:
 class ProjectMap:
     """
     Граф классов и интерфейсов проекта.
-    Строится единожды (Шаг 0) и передаётся во все последующие компоненты.
+    Строится единожды (Шаг 0) и передается во все последующие компоненты.
     """
     classes: dict[str, ClassInfo] = field(default_factory=dict)
     interfaces: dict[str, InterfaceInfo] = field(default_factory=dict)
@@ -99,7 +99,7 @@ class HeuristicResult:
     """
     Выход функции identify_candidates().
     findings идут напрямую в Report Aggregator (минуя LLM-адаптер).
-    candidates идут в LlmSolidAdapter (если LLM включён).
+    candidates идут в LlmSolidAdapter (если LLM включен).
     """
     findings: list[Finding] = field(default_factory=list)
     candidates: list[LlmCandidate] = field(default_factory=list)
@@ -112,11 +112,11 @@ class HeuristicResult:
 @dataclass
 class LlmConfig:
     """
-    Конфигурация LLM-функционала из .solid-analyzer.yml.
+    Конфигурация LLM-функционала из .solid_config.json
     api_key может быть None для Ollama (локальный режим без аутентификации).
     """
-    provider: str                    # "openai" | "anthropic" | "ollama"
-    model: str                       # например: "gpt-4o-mini"
+    provider: str                    # "openrouter"
+    model: str                       # например: "openai/gpt-4o-mini"
     api_key: str | None              # None для ollama
     endpoint: str | None             # для ollama: "http://localhost:11434"
     max_tokens_per_run: int          # бюджет в токенах за один запуск
@@ -127,21 +127,24 @@ class LlmConfig:
 @dataclass
 class LlmAnalysisInput:
     """
-    Вход LlmSolidAdapter.analyze().
-    НЕ содержит static findings — адаптер не знает о результатах других адаптеров.
+    Вход LlmSolidAdapter.analyze()
+    Содержит только данные анализа: карту проекта и список кандидатов
+    Конфигурация LLM передается в адаптер через DI (LlmSolidAdapter.config)
     """
     project_map: ProjectMap
     candidates: list[LlmCandidate]
-    config: LlmConfig
 
 
 @dataclass
 class LlmMetadata:
-    """Метаданные выполнения LLM-анализа для summary в отчёте."""
+    """Метаданные выполнения LLM-анализа для summary в отчете."""
     candidates_processed: int
     candidates_skipped: int
     tokens_used: int
     cache_hits: int
+    parse_failures: int = 0          # NEW: количество failure-ответов парсера
+    parse_partials: int = 0          # NEW: количество partial-ответов
+    parse_warnings: int = 0          # NEW: общее количество предупреждений ACL-B
 
 
 @dataclass
@@ -154,6 +157,9 @@ class LlmAnalysisOutput:
             candidates_skipped=0,
             tokens_used=0,
             cache_hits=0,
+            parse_failures=0,   # NEW: количество failure-ответов парсера
+            parse_partials=0,   # NEW: количество partial-ответов
+            parse_warnings=0,   # NEW: общее количество предупреждений ACL-B
         )
     )
 
@@ -173,6 +179,7 @@ class FindingDetails:
     suggestion: str | None = None                 # конкретная рекомендация
     analyzed_with: list[str] | None = None        # классы, участвовавшие в анализе
     heuristic_corroboration: bool | None = None   # True → severity=warning, False → info
+    method_name: str | None = None                # NEW: имя метода, к которому относится finding
 
 
 @dataclass
@@ -185,7 +192,7 @@ class Finding:
       Эвристики:     OCP-H-001, LSP-H-001 (см. архитектурный план)
       LLM:           OCP-LLM-001, LSP-LLM-001
 
-    line=None для LLM-findings (LLM не может надёжно указать строку).
+    line=None для LLM-findings (LLM не может надежно указать строку).
     """
     rule: str
     file: str
@@ -195,3 +202,27 @@ class Finding:
     class_name: str | None = None
     line: int | None = None
     details: FindingDetails | None = None
+
+# Добавлен новый датакласс LlmResponse с frozen=True (в рамках Шага 1 ACL Strategy)
+
+@dataclass(frozen=True)
+class LlmResponse:
+    """
+    Контрактная граница (ACL-A) между провайдером и Gateway.
+    Объект иммутабелен (frozen=True) и гарантированно содержит валидные данные.
+    Сырые данные (dict от провайдера) не пересекают эту границу.
+    """
+    content: str
+    tokens_used: int
+    model: str = ""
+
+# --- Типы для семантического барьера (ACL-B) ---
+
+ParseStatus = Literal["success", "partial", "failure"]
+
+@dataclass
+class ParseResult:
+    """Результат безопасного извлечения findings из ответа LLM."""
+    findings: list[Finding]  # Ожидается, что тип Finding уже определен в файле
+    warnings: list[str]
+    status: ParseStatus

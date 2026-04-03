@@ -1,196 +1,140 @@
-# комментарий (ru): Адаптер для анализа графа вызовов (call graph) с помощью pyan3.
-# Цель: построить ориентированный граф "кто кого вызывает" внутри пакета app,
-# отфильтровать слой routers (FastAPI endpoints) и вернуть данные в JSON-формате
-# для последующей визуализации/AI-анализа (OCP/LSP, поиск мёртвого кода и т.д.).
+# ===================================================================================================
+# Адаптер графа вызовов (Pyan3 Adapter)
+# 
+# Ключевая роль: Построение статического графа вызовов (Call Graph) и выявление "мертвого" кода.
+# 
+# Основные архитектурные задачи:
+# 1. Изолированный запуск утилиты pyan3 через subprocess (через параметр cwd) без изменения глобального состояния процесса (без os.chdir).
+# 2. Ручной сбор Python-файлов перед запуском с фильтрацией через ignore_dirs.
+# 3. Парсинг текстового вывода pyan3 для извлечения узлов (функций/классов) и ребер (вызовов).
+# 4. Расчет входящих вызовов для выявления "повисших" (неиспользуемых) узлов.
+# ===================================================================================================
 
 from __future__ import annotations
 
-import os  # комментарий (ru): работа с файловой системой и путями
-import re  # комментарий (ru): регулярки для парсинга вывода pyan3
-import subprocess  # комментарий (ru): запуск pyan3 как CLI-инструмента
+import os  # работа с файловой системой и путями
+import re  # регулярки для парсинга вывода pyan3
+import subprocess  # запуск pyan3 как CLI-инструмента
 from typing import Any, Dict, List, Set
 
 from solid_dashboard.interfaces.analyzer import IAnalyzer  # общий протокол адаптеров пайплайна 
 
 class Pyan3Adapter(IAnalyzer):
-    """Адаптер для pyan3: строит граф вызовов на уровне функций/методов."""
-
+    # Адаптер для pyan3: строит граф вызовов на уровне функций/методов
     @property
     def name(self) -> str:
-        # комментарий (ru): ключ, под которым результат адаптера попадает в итоговый JSON
+        # ключ, под которым результат адаптера попадает в итоговый JSON
         return "pyan3"
 
-    def run(
-        self,
-        target_dir: str,
-        context: Dict[str, Any],
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        # комментарий (ru): target_dir в нашем пайплайне — это "./app".
-        # Нам нужно запустить pyan3 по этому каталогу и распарсить его текстовый вывод.
+    def run(self, target_dir: str, context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+        # параметр context требуется интерфейсом IAnalyzer но не используется здесь
+        _ = context
+
         project_root = os.path.dirname(os.path.abspath(target_dir))
+        appdir = os.path.abspath(target_dir)
 
-        # комментарий (ru): собираем абсолютный путь к анализируемому пакету
-        app_dir = os.path.abspath(target_dir)
+        # 1. Извлекаем ignore_dirs
+        ignore_dirs_cfg = config.get("ignore_dirs") or []
+        ignore_dirs = [d.strip() for d in ignore_dirs_cfg if d and d.strip()]
 
-        # комментарий (ru): pyan3 мы будем вызывать из корня проекта, чтобы относительные
-        # пути в его выводе были стабильными и повторяемыми.
-        saved_cwd = os.getcwd()
+        # 2. Безопасно собираем список python-файлов обходя ignore_dirs
+        py_files = []
+        for root, dirs, files in os.walk(appdir):
+            # In-place очистка директорий
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+            for f in files:
+                if f.endswith(".py"):
+                    # Используем относительные пути чтобы не превысить лимит длины CLI-команды ОС
+                    rel_path = os.path.relpath(os.path.join(root, f), project_root)
+                    py_files.append(rel_path)
+
+        if not py_files:
+            return self._error("No python files found for pyan3 analysis.")
+
+        # 3. Формируем команду передавая конкретный чистый список файлов
+        cmd = ["pyan3"] + py_files + ["--uses", "--no-defines", "--text", "--quiet"]
+
         try:
-            os.chdir(project_root)
+            # 4. Используем параметр cwd вместо глобального и опасного os.chdir()
+            completed = subprocess.run(
+                cmd, 
+                cwd=project_root, 
+                check=False, 
+                capture_output=True, 
+                text=True
+            )
+        except FileNotFoundError:
+            return self._error("pyan3 executable not found. Make sure pyan3 is installed in the virtual environment.")
 
-            # комментарий (ru): Формируем команду CLI.
-            # Выбор флагов:
-            #   --uses       : только рёбра "использует/вызывает", без "определяет";
-            #   --no-defines : не добавлять рёбра определения (упрощаем граф);
-            #   --text       : текстовый формат вывода, легко парсить;
-            #   --quiet      : подавить лишний шум/diagnostics (если есть).
-            #
-            # Можно добавить --depth=3, но пока возьмём дефолт (полный уровень методов),
-            # чтобы не терять детали для последующего анализа.
-            cmd = [
-                "pyan3",
-                app_dir,
-                "--uses",
-                "--no-defines",
-                "--text",
-                "--quiet",
-            ]
+        if completed.returncode != 0:
+            stderr = completed.stderr.strip() or "Unknown pyan3 error."
+            return self._error(f"pyan3 failed with exit code {completed.returncode}: {stderr}", raw_output=completed.stdout)
 
-            try:
-                # комментарий (ru): запускаем pyan3 как внешний процесс.
-                # Используем capture_output=True, text=True для получения stdout как строки.
-                completed = subprocess.run(
-                    cmd,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-            except FileNotFoundError:
-                # комментарий (ru): pyan3 не установлен в окружении — возвращаем
-                # аккуратную ошибку, чтобы пайплайн не падал целиком.
-                return self._error(
-                    "pyan3 executable not found. "
-                    "Make sure 'pyan3' is installed in the virtual environment."
-                )
+        raw_output = completed.stdout
+        nodes: Set[str] = set()
+        edges: List[Dict[str, str]] = []
 
-            if completed.returncode != 0:
-                # комментарий (ru): pyan3 завершился с ошибкой — возвращаем stderr,
-                # чтобы пользователь видел, что пошло не так (синтаксическая ошибка и т.п.)
-                stderr = completed.stderr.strip() or "Unknown pyan3 error."
-                return self._error(f"pyan3 failed with exit code {completed.returncode}: {stderr}")
+        current_src: str | None = None
 
-            raw_output = completed.stdout
+        for line in raw_output.splitlines():
+            if not line.strip():
+                continue
 
-            # комментарий (ru): новый парсер текстового вывода pyan3.
-            # Формат в режиме --text:
-            #   NodeName
-            #       [U] UsedNode1
-            #       [U] UsedNode2
-            #   OtherNode
-            #       [U] ...
-            #
-            # Строка БЕЗ ведущих пробелов = текущий источник (current_src).
-            # Строка С ведущими пробелами и префиксом "[U]" = ребро
-            #   current_src -> used_node.
+            if not line.startswith(" "):
+                current_src = line.strip()
+                nodes.add(current_src)
+                continue
 
-            nodes: Set[str] = set()
-            edges: List[Dict[str, str]] = []
+            stripped = line.strip()
+            if not stripped.startswith("- U"):
+                continue
 
-            current_src: str | None = None
+            used_name = stripped[len("- U"):].strip()
+            if not used_name or current_src is None:
+                continue
 
-            for line in raw_output.splitlines():
-                # комментарий (ru): сохраняем оригинал для анализа отступа,
-                # но часть логики будем делать на stripped-версии
-                if not line.strip():
-                    continue  # пустые строки пропускаем
+            nodes.add(used_name)
+            edges.append({"from": current_src, "to": used_name})
 
-                # строка без начального пробела → новый текущий узел
-                if not line.startswith((" ", "\t")):
-                    current_src = line.strip()
-                    nodes.add(current_src)
-                    continue
+        # грязный хардкод "app.routers" удален. 
+        # Адаптер возвращает чистый граф вызовов оставляя фильтрацию потребителю.
 
-                # если мы здесь, значит строка с отступом
-                stripped = line.strip()
-                # интересуют только строки вида "[U] Something"
-                if not stripped.startswith("[U]"):
-                    continue
+        used_nodes: Set[str] = set()
+        for e in edges:
+            used_nodes.add(e["from"])
+            used_nodes.add(e["to"])
 
-                # вырезаем метку "[U]" и берём имя зависимого узла
-                used_name = stripped[len("[U]") :].strip()
-                if not used_name or current_src is None:
-                    continue
+        nodes = used_nodes | nodes
 
-                # добавляем ребро current_src -> used_name
-                nodes.add(used_name)
-                edges.append({"from": current_src, "to": used_name})
+        unique_edges: Set[tuple[str, str]] = set()
+        for e in edges:
+            unique_edges.add((e["from"], e["to"]))
 
-            # комментарий (ru): на этом этапе nodes/edges содержат граф для ВСЕХ узлов,
-            # включая endpoints в routers. Дальше применяем фильтрацию routers.
+        edges = [{"from": src, "to": dst} for src, dst in unique_edges]
 
-            router_nodes: Set[str] = set()
-            for node in nodes:
-                # считаем узел "router-узлом", если он явно относится к модулю app.routers
-                # или к функциям из этих модулей (по имени вида "app.routers.users", "app.routers.users.get_me" и т.п.)
-                if node.startswith("app.routers") or ".routers." in node:
-                    router_nodes.add(node)
+        incoming_count: Dict[str, int] = {n: 0 for n in nodes}
+        for e in edges:
+            dst = e["to"]
+            if dst in incoming_count:
+                incoming_count[dst] += 1
 
-            if router_nodes:
-                edges = [
-                    e
-                    for e in edges
-                    if e["from"] not in router_nodes and e["to"] not in router_nodes
-                ]
+        dead_nodes = sorted([n for n, cnt in incoming_count.items() if cnt == 0])
+        node_list = sorted(list(nodes))
 
-                used_nodes: Set[str] = set()
-                for e in edges:
-                    used_nodes.add(e["from"])
-                    used_nodes.add(e["to"])
-                nodes = used_nodes
-
-            # комментарий (ru): дедупликация рёбер.
-            # Pyan3 иногда даёт несколько одинаковых строк [U] для одной пары узлов.
-            # Чтобы не раздувать граф, превращаем список рёбер в множество пар.
-            unique_edges: Set[tuple[str, str]] = set()
-            for e in edges:
-                unique_edges.add((e["from"], e["to"]))
-
-            edges = [{"from": src, "to": dst} for src, dst in unique_edges]
-
-            # комментарий (ru): health-check: считаем узлы без входящих рёбер
-            # (их никто не вызывает внутри проекта). Это кандидаты на "мёртвый код".
-            incoming_count: Dict[str, int] = {n: 0 for n in nodes}
-            for e in edges:
-                dst = e["to"]
-                if dst in incoming_count:
-                    incoming_count[dst] += 1
-
-            dead_nodes = sorted(n for n, cnt in incoming_count.items() if cnt == 0)
-
-            node_list = sorted(nodes)
-
-            return {
-                "is_success": True,
-                "node_count": len(node_list),
-                "edge_count": len(edges),
-                "nodes": node_list,
-                "edges": edges,
-                "dead_node_count": len(dead_nodes),
-                "dead_nodes": dead_nodes,
-                "raw_output": raw_output,
-            }
-
-        finally:
-            # комментарий (ru): восстанавливаем исходную рабочую директорию,
-            # чтобы не ломать окружение для других адаптеров.
-            os.chdir(saved_cwd)
+        return {
+            "is_success": True,
+            "node_count": len(node_list),
+            "edge_count": len(edges),
+            "nodes": node_list,
+            "edges": edges,
+            "dead_node_count": len(dead_nodes),
+            "dead_nodes": dead_nodes,
+            "raw_output": raw_output,
+        }
 
     @staticmethod
-    def _error(message: str) -> Dict[str, Any]:
-        # комментарий (ru): стандартизированный формат ошибки адаптера.
-        # Все числовые поля и коллекции присутствуют, чтобы генератор отчёта
-        # мог безопасно читать их без дополнительных проверок.
+    def _error(message: str, raw_output: str = "") -> Dict[str, Any]:
+    # Утилитный метод для формирования стандартного ответа с ошибкой
         return {
             "is_success": False,
             "error": message,
@@ -200,5 +144,5 @@ class Pyan3Adapter(IAnalyzer):
             "edges": [],
             "dead_node_count": 0,
             "dead_nodes": [],
-            "raw_output": "",
+            "raw_output": raw_output,
         }

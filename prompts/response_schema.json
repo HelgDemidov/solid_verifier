@@ -1,0 +1,16 @@
+{
+  "instruction": "Output ONLY valid JSON matching the schema below. Do not include markdown formatting like ```json, greetings, or explanations outside the JSON object.",
+  "expected_output": {
+    "findings": [
+      {
+        "rule": "OCP-Violation-TypeBranching",
+        "principle": "OCP",
+        "file": "path/to/file.py",
+        "class_name": "ClassName",
+        "message": "Short, concrete description of the issue.",
+        "severity": "warning",
+        "details": "Detailed explanation of why it violates the principle and how it could be refactored."
+      }
+    ]
+  }
+}

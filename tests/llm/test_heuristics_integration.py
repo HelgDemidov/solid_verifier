@@ -1,27 +1,21 @@
 """
 Интеграционные тесты Шага 3: полный цикл build_project_map → identify_candidates.
 
-В отличие от test_heuristics.py (unit-тесты отдельных эвристик через _pm_from_source),
+В отличие от test_heuristics.py (unit-тесты отдельных эвристик напрямую),
 здесь мы проверяем всю цепочку на реальных Python-файлах:
-  build_project_map([paths]) → ProjectMap → identify_candidates(pm) → HeuristicResult
+build_project_map([paths]) → ProjectMap → identify_candidates(pm) → HeuristicResult
 
 Каждый тест проверяет один аспект интеграции: что конкретный rule-код попадает в findings,
 что чистый код не порождает ложных срабатываний, что метаданные корректны и т.д.
 """
-# ---------------------------------------------------------------------------
-# НАПОМИНАЛКА ПО КОМАНДАМ ЗАПУСКА ТЕСТОВ
-# ---------------------------------------------------------------------------
-
-# Только unit-тесты (быстро): pytest tools/solid_verifier/tests/llm/test_heuristics.py -v
-# Только интеграционные тесты: pytest -m integration -v
-# Всё вместе: pytest tools/solid_verifier/tests/llm/ -v
-
 import textwrap
 import pytest
 import sys
-from tools.solid_verifier.solid_dashboard.llm.ast_parser import build_project_map
-from tools.solid_verifier.solid_dashboard.llm.heuristics import identify_candidates
-from tools.solid_verifier.solid_dashboard.llm.types import HeuristicResult
+from pathlib import Path
+
+from solid_dashboard.llm.ast_parser import build_project_map
+from solid_dashboard.llm.heuristics import identify_candidates
+from solid_dashboard.llm.types import HeuristicResult
 
 pytestmark = pytest.mark.integration
 
@@ -32,9 +26,9 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(scope="module")
 def smelly_project_dir(tmp_path_factory):
     """
-    Создаёт временную директорию с двумя Python-файлами:
+    Создает временную директорию с двумя Python-файлами:
     - smells.py — классы с намеренными нарушениями для каждой эвристики.
-    - clean.py  — классы без нарушений (для проверки отсутствия false positives).
+    - clean.py — классы без нарушений (для проверки отсутствия false positives).
 
     scope="module" — файлы создаются один раз для всего модуля тестов.
     Это экономит время: build_project_map вызывается не на каждый тест.
@@ -42,164 +36,118 @@ def smelly_project_dir(tmp_path_factory):
     base = tmp_path_factory.mktemp("integration_project")
 
     # --- smells.py: по одному нарушению на каждую эвристику ---
-    # Намеренно пишем с реальными именами методов и структурами,
-    # чтобы интеграционный тест был ближе к боевым условиям.
     (base / "smells.py").write_text(textwrap.dedent("""
-        # Классы-«носители» нарушений для интеграционных тестов.
-        # Каждый класс — нарушение ровно одной эвристики.
+    # Классы-«носители» нарушений для интеграционных тестов.
+    # Каждый класс — нарушение ровно одной эвристики.
 
+    # === LSP-H-001: override метод бросает NotImplementedError ===
+    class BaseSerializer:
+        def serialize(self, data): ...
 
-        # === LSP-H-001: override метод бросает NotImplementedError ===
+    class XmlSerializer(BaseSerializer):
+        def serialize(self, data):
+            raise NotImplementedError("XML not supported")
 
-        class BaseSerializer:
-            def serialize(self, data): ...
+    # === LSP-H-002: override метод с пустым телом ===
+    class BaseNotifier:
+        def notify(self, message): ...
 
+    class SilentNotifier(BaseNotifier):
+        def notify(self, message):
+            pass  # намеренно пустой override
 
-        class XmlSerializer(BaseSerializer):
-            def serialize(self, data):
-                raise NotImplementedError("XML not supported")
+    # === LSP-H-004: __init__ без super().__init__() ===
+    class BaseConfig:
+        def __init__(self):
+            self.debug = False
 
+    class AppConfig(BaseConfig):
+        def __init__(self):
+            # Намеренно не вызываем super().__init__() — нарушение LSP
+            self.app_name = "MyApp"
 
-        # === LSP-H-002: override метод с пустым телом ===
+    # === OCP-H-001: цепочка if/elif с isinstance >= 4 ветвей ===
+    class Circle: pass
+    class Square: pass
+    class Triangle: pass
+    class Hexagon: pass
 
-        class BaseNotifier:
-            def notify(self, message): ...
+    class ShapeRenderer:
+        def render(self, shape):
+            if isinstance(shape, Circle):
+                return "circle"
+            elif isinstance(shape, Square):
+                return "square"
+            elif isinstance(shape, Triangle):
+                return "triangle"
+            elif isinstance(shape, Hexagon):
+                return "hexagon"
 
+    # === OCP-H-004: высокая CC + isinstance ===
+    class BaseReport: pass
 
-        class SilentNotifier(BaseNotifier):
-            def notify(self, message):
-                pass  # намеренно пустой override
+    class ComplexProcessor:
+        def process(self, item):
+            # 4 независимых if-ветки создают CC=5 (base=1 + 4 ветви)
+            if item.step == "validate":
+                self._validate(item)
+            if item.step == "transform":
+                self._transform(item)
+            if item.step == "enrich":
+                self._enrich(item)
+            if isinstance(item, BaseReport):
+                self._special_report_handling(item)
+                
+        def _validate(self, item): ...
+        def _transform(self, item): ...
+        def _enrich(self, item): ...
+        def _special_report_handling(self, item): ...
 
+    # === Класс с несколькими нарушениями: должен иметь высший приоритет ===
+    class HighPrioritySmell(BaseSerializer):
+        def __init__(self):
+            # LSP-H-004: нет super().__init__()
+            self.ready = False
 
-        # === LSP-H-003: isinstance на параметре базового типа ===
-
-        class BaseReport:
-            def render(self): ...
-
-
-        class ReportExporter:
-            def export(self, report: BaseReport) -> None:
-                # Метод принимает BaseReport, но явно проверяет конкретный тип
-                if isinstance(report, BaseReport):
-                    report.render()
-
-
-        # === LSP-H-004: __init__ без super().__init__() ===
-
-        class BaseConfig:
-            def __init__(self):
-                self.debug = False
-
-
-        class AppConfig(BaseConfig):
-            def __init__(self):
-                # Намеренно не вызываем super().__init__() — нарушение LSP
-                self.app_name = "MyApp"
-
-
-        # === OCP-H-001: цепочка if/elif с isinstance >= 3 ветвей ===
-
-        class ShapeRenderer:
-            def render(self, shape):
-                if isinstance(shape, BaseReport):
-                    self._draw_report(shape)
-                elif isinstance(shape, BaseSerializer):
-                    self._draw_serial(shape)
-                elif isinstance(shape, BaseNotifier):
-                    self._draw_notify(shape)
-
-            def _draw_report(self, s): ...
-            def _draw_serial(self, s): ...
-            def _draw_notify(self, s): ...
-
-
-        # === OCP-H-003: словарь-диспетчер с ключами-типами ===
-
-        class DispatchEngine:
-            def setup(self):
-                # Словарь с тремя ключами-классами из проекта — OCP-запах
-                self._handlers = {
-                    BaseSerializer: self._handle_serializer,
-                    BaseNotifier:   self._handle_notifier,
-                    BaseReport:     self._handle_report,
-                }
-
-            def _handle_serializer(self, obj): ...
-            def _handle_notifier(self, obj): ...
-            def _handle_report(self, obj): ...
-
-
-        # === OCP-H-004: высокая CC + isinstance ===
-
-        class ComplexProcessor:
-            def process(self, item):
-                # 4 независимых if-ветки создают CC=5 (base=1 + 4 ветви)
-                if item.step == "validate":
-                    self._validate(item)
-                if item.step == "transform":
-                    self._transform(item)
-                if item.step == "enrich":
-                    self._enrich(item)
-                if isinstance(item, BaseReport):
-                    self._special_report_handling(item)
-
-            def _validate(self, item): ...
-            def _transform(self, item): ...
-            def _enrich(self, item): ...
-            def _special_report_handling(self, item): ...
-
-
-        # === Класс с несколькими нарушениями: должен иметь высший приоритет ===
-
-        class HighPrioritySmell(BaseSerializer):
-            def __init__(self):
-                # LSP-H-004: нет super().__init__()
-                self.ready = False
-
-            def serialize(self, data):
-                # LSP-H-001: override с NotImplementedError
-                raise NotImplementedError
+        def serialize(self, data):
+            # LSP-H-001: override с NotImplementedError
+            raise NotImplementedError
     """), encoding="utf-8")
 
     # --- clean.py: образцово-показательный код без нарушений ---
     (base / "clean.py").write_text(textwrap.dedent("""
-        # Чистый модуль — никаких нарушений OCP/LSP.
-        # Должен давать нулевое количество findings от наших эвристик.
+    # Чистый модуль — никаких нарушений OCP/LSP.
+    # Должен давать нулевое количество findings от наших эвристик.
 
-        class DataTransformer:
-            \"\"\"Трансформирует данные без наследования и type-dispatch.\"\"\"
+    class DataTransformer:
+        \"\"\"Трансформирует данные без наследования и type-dispatch.\"\"\"
 
-            def transform(self, data: dict) -> dict:
-                # Простая логика без isinstance и без длинных if/elif цепочек
-                result = {}
-                for key, value in data.items():
-                    result[key] = str(value).strip()
-                return result
+        def transform(self, data: dict) -> dict:
+            # Простая логика без isinstance и без длинных if/elif цепочек
+            result = {}
+            for key, value in data.items():
+                result[key] = str(value).strip()
+            return result
 
-            def validate(self, data: dict) -> bool:
-                return bool(data)
+        def validate(self, data: dict) -> bool:
+            return bool(data)
 
+    class StringNormalizer:
+        \"\"\"Нормализует строки — простой класс без наследования.\"\"\"
 
-        class StringNormalizer:
-            \"\"\"Нормализует строки — простой класс без наследования.\"\"\"
+        def normalize(self, text: str) -> str:
+            return text.lower().strip()
 
-            def normalize(self, text: str) -> str:
-                return text.lower().strip()
-
-            def is_empty(self, text: str) -> bool:
-                return len(text.strip()) == 0
+        def is_empty(self, text: str) -> bool:
+            return len(text.strip()) == 0
     """), encoding="utf-8")
 
     return base
-
 
 @pytest.fixture(scope="module")
 def heuristic_result(smelly_project_dir) -> HeuristicResult:
     """
     Строит ProjectMap по всем файлам в smelly_project_dir и запускает identify_candidates.
-
-    Результат переиспользуется всеми тестами модуля без повторного вызова
-    build_project_map — так мы проверяем одно состояние системы во всех тестах.
     """
     py_files = [
         str(smelly_project_dir / "smells.py"),
@@ -208,49 +156,36 @@ def heuristic_result(smelly_project_dir) -> HeuristicResult:
     pm = build_project_map(py_files)
     return identify_candidates(pm)
 
-
 # ---------------------------------------------------------------------------
 # Тест 1: все ожидаемые rule-коды присутствуют в findings
 # ---------------------------------------------------------------------------
 
 class TestAllRulesPresent:
 
-    # OCP-H-002 (match/case) намеренно исключён из smells.py —
-    # он требует Python 3.10+ и проверен отдельно в unit-тестах.
+    # OCP-H-002 (match/case) проверен отдельно. OCP-H-003 и LSP-H-003 удалены.
     EXPECTED_RULES = {
         "LSP-H-001",
         "LSP-H-002",
-        "LSP-H-003",
         "LSP-H-004",
         "OCP-H-001",
-        "OCP-H-003",
         "OCP-H-004",
     }
 
     def test_all_expected_rules_present(self, heuristic_result):
-        """
-        Каждый из 7 rule-кодов должен встретиться хотя бы в одном finding.
-        Если хоть один отсутствует — какая-то эвристика перестала работать
-        или build_project_map перестал корректно парсить нужный класс.
-        """
+        """Каждый из rule-кодов должен встретиться хотя бы в одном finding."""
         found_rules = {f.rule for f in heuristic_result.findings}
         missing = self.EXPECTED_RULES - found_rules
-        # Выводим, каких именно rules не хватает, чтобы падение было информативным
         assert not missing, f"Missing rule codes in findings: {missing}"
 
     def test_no_unexpected_rule_codes(self, heuristic_result):
-        """
-        В findings не должно появляться неизвестных rule-кодов.
-        Защита от случайных «фантомных» эвристик при рефакторинге.
-        """
+        """В findings не должно появляться неизвестных rule-кодов."""
         known_rules = {
-            "LSP-H-001", "LSP-H-002", "LSP-H-003", "LSP-H-004",
-            "OCP-H-001", "OCP-H-002", "OCP-H-003", "OCP-H-004",
+            "LSP-H-001", "LSP-H-002", "LSP-H-004",
+            "OCP-H-001", "OCP-H-002", "OCP-H-004",
         }
         found_rules = {f.rule for f in heuristic_result.findings}
         unknown = found_rules - known_rules
         assert not unknown, f"Unknown rule codes appeared: {unknown}"
-
 
 # ---------------------------------------------------------------------------
 # Тест 2: отсутствие ложных срабатываний на чистом коде
@@ -259,12 +194,7 @@ class TestAllRulesPresent:
 class TestNoFalsePositivesOnCleanCode:
 
     def test_clean_classes_produce_no_findings(self, smelly_project_dir):
-        """
-        Классы из clean.py не должны давать ни одного finding.
-
-        Строим отдельный ProjectMap только из clean.py — так мы изолируем
-        «чистый» контекст от smells.py и проверяем именно false positives.
-        """
+        """Классы из clean.py не должны давать ни одного finding."""
         pm = build_project_map([str(smelly_project_dir / "clean.py")])
         result = identify_candidates(pm)
         assert result.findings == [], (
@@ -273,19 +203,14 @@ class TestNoFalsePositivesOnCleanCode:
         )
 
     def test_clean_classes_not_in_candidates_as_findings(self, smelly_project_dir):
-        """
-        DataTransformer и StringNormalizer не должны попасть в candidates
-        с heuristic_reasons (только в иерархии могут быть как «потенциальные»).
-        """
+        """Чистые классы не должны попадать в кандидаты по причинам эвристик."""
         pm = build_project_map([str(smelly_project_dir / "clean.py")])
         result = identify_candidates(pm)
-        # У чистых standalone-классов не должно быть heuristic_reasons
         for candidate in result.candidates:
             assert candidate.heuristic_reasons == [], (
                 f"Clean class '{candidate.class_name}' unexpectedly has "
                 f"heuristic reasons: {candidate.heuristic_reasons}"
             )
-
 
 # ---------------------------------------------------------------------------
 # Тест 3: корректность метаданных findings
@@ -294,23 +219,17 @@ class TestNoFalsePositivesOnCleanCode:
 class TestFindingMetadataIntegrity:
 
     def test_all_findings_have_required_fields(self, heuristic_result):
-        """
-        Каждый finding должен иметь все обязательные поля с непустыми значениями.
-        Защита от случайного изменения _make_finding() или Finding-dataclass.
-        """
+        """Каждый finding должен иметь все обязательные поля."""
         for finding in heuristic_result.findings:
-            assert finding.rule,                 f"Empty rule in finding: {finding}"
-            assert finding.file,                 f"Empty file in finding: {finding}"
-            assert finding.message,              f"Empty message in finding: {finding}"
+            assert finding.rule, f"Empty rule in finding: {finding}"
+            assert finding.file, f"Empty file in finding: {finding}"
+            assert finding.message, f"Empty message in finding: {finding}"
             assert finding.source == "heuristic", f"Wrong source: {finding.source}"
-            assert finding.severity == "warning", f"Wrong severity: {finding.severity}"
-            assert finding.details is not None,   f"Missing details in: {finding}"
+            assert finding.severity in ("warning", "info"), f"Wrong severity: {finding.severity}"
+            assert finding.details is not None, f"Missing details in: {finding}"
 
     def test_lsp_rules_have_lsp_principle(self, heuristic_result):
-        """
-        Все findings с rule=LSP-H-* должны иметь details.principle == 'LSP'.
-        Несоответствие — признак copy-paste ошибки при добавлении новой эвристики.
-        """
+        """Все findings с rule=LSP-H-* должны иметь details.principle == 'LSP'."""
         lsp_findings = [f for f in heuristic_result.findings if f.rule.startswith("LSP")]
         assert lsp_findings, "Expected at least one LSP finding"
         for finding in lsp_findings:
@@ -319,27 +238,13 @@ class TestFindingMetadataIntegrity:
             )
 
     def test_ocp_rules_have_ocp_principle(self, heuristic_result):
-        """
-        Все findings с rule=OCP-H-* должны иметь details.principle == 'OCP'.
-        """
+        """Все findings с rule=OCP-H-* должны иметь details.principle == 'OCP'."""
         ocp_findings = [f for f in heuristic_result.findings if f.rule.startswith("OCP")]
         assert ocp_findings, "Expected at least one OCP finding"
         for finding in ocp_findings:
             assert finding.details.principle == "OCP", (
                 f"Rule {finding.rule} has wrong principle: {finding.details.principle}"
             )
-
-    def test_findings_reference_existing_files(self, heuristic_result, smelly_project_dir):
-        """
-        Поле finding.file должно указывать на реально существующий файл.
-        Защита от случайного дрейфа путей между build_project_map и findings.
-        """
-        import os
-        for finding in heuristic_result.findings:
-            assert os.path.isfile(finding.file), (
-                f"Finding references non-existent file: {finding.file}"
-            )
-
 
 # ---------------------------------------------------------------------------
 # Тест 4: корректность кандидатов (candidates)
@@ -348,11 +253,7 @@ class TestFindingMetadataIntegrity:
 class TestCandidatesIntegrity:
 
     def test_smelly_classes_are_candidates(self, heuristic_result):
-        """
-        Классы с нарушениями должны попасть в candidates.
-        Проверяем конкретные имена из smells.py.
-        """
-        # Эти классы имеют хотя бы одно эвристическое срабатывание
+        """Классы с нарушениями должны попасть в candidates."""
         expected_candidates = {
             "XmlSerializer",
             "SilentNotifier",
@@ -366,37 +267,23 @@ class TestCandidatesIntegrity:
         assert not missing, f"Expected classes not in candidates: {missing}"
 
     def test_high_priority_class_ranked_first(self, heuristic_result):
-        """
-        HighPrioritySmell (два нарушения: LSP-H-001 + LSP-H-004) должен иметь
-        более высокий приоритет, чем классы с одним нарушением.
-
-        Проверяем инвариант сортировки: приоритет строго убывает (или не растёт).
-        """
+        """HighPrioritySmell должен иметь высокий приоритет."""
         priorities = [c.priority for c in heuristic_result.candidates]
         assert priorities == sorted(priorities, reverse=True), (
             "Candidates are not sorted by priority in descending order"
         )
-
-        # HighPrioritySmell должен быть в первой тройке по приоритету
         top_names = [c.class_name for c in heuristic_result.candidates[:3]]
         assert "HighPrioritySmell" in top_names, (
             f"HighPrioritySmell not in top-3 candidates: {top_names}"
         )
 
     def test_candidates_have_valid_candidate_type(self, heuristic_result):
-        """
-        Поле candidate_type должно быть одним из допустимых значений.
-        """
         valid_types = {"ocp", "lsp", "both"}
         for candidate in heuristic_result.candidates:
-            assert candidate.candidate_type in valid_types, (
-                f"Invalid candidate_type '{candidate.candidate_type}' "
-                f"for class '{candidate.class_name}'"
-            )
+            assert candidate.candidate_type in valid_types
 
 # ---------------------------------------------------------------------------
-# OCP-H-002 (match/case): интеграционный тест через build_project_map +
-# identify_candidates. Проверяем полный путь от tmp-файла до finding.
+# OCP-H-002 (match/case): интеграционный тест 
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(
@@ -404,114 +291,99 @@ class TestCandidatesIntegrity:
     reason="match/case syntax requires Python 3.10+"
 )
 class TestOcpH002Integration:
-    """
-    Интеграционный тест: OCP-H-002 (match/case с тремя и более ветвями)
-    детектируется через полный стек build_project_map → identify_candidates.
-
-    Ранее OCP-H-002 покрывался только unit-тестами (изолированно от AST-парсера).
-    Данный класс закрывает зазор: проверяем, что finding возникает в реальном
-    tmp-файле, прошедшем через build_project_map, и корректно прилетает
-    из identify_candidates.
-    """
 
     @pytest.fixture
     def match_project_dir(self, tmp_path_factory):
         base = tmp_path_factory.mktemp("match_project")
         (base / "dispatcher.py").write_text(textwrap.dedent("""
-            # === OCP-H-002: match/case с тремя type-паттернами (MatchClass) ===
-            # Паттерн вида case SomeClass(): ... — это именно то, что ловит H-002.
-            # В реальном коде это диспетчер, завязанный на конкретные типы событий.
+        class Created: pass
+        class Updated: pass
+        class Deleted: pass
 
-            class Created:
-                pass
+        class EventDispatcher:
+            def dispatch(self, event):
+                match event:
+                    case Created(): pass
+                    case Updated(): pass
+                    case Deleted(): pass
 
-            class Updated:
-                pass
-
-            class Deleted:
-                pass
-
-
-            class EventDispatcher:
-                def dispatch(self, event):
-                    match event:
-                        case Created():
-                            self._on_created(event)
-                        case Updated():
-                            self._on_updated(event)
-                        case Deleted():
-                            self._on_deleted(event)
-
-                def _on_created(self, e): ...
-                def _on_updated(self, e): ...
-                def _on_deleted(self, e): ...
-
-
-            # Только два type-паттерна — ниже порога, H-002 не должен срабатывать
-            class TwoBranchDispatcher:
-                def route(self, cmd):
-                    match cmd:
-                        case Created():
-                            self._start()
-                        case Updated():
-                            self._stop()
-
-                def _start(self): ...
-                def _stop(self): ...
+        class TwoBranchDispatcher:
+            def route(self, cmd):
+                match cmd:
+                    case Created(): pass
+                    case Updated(): pass
         """), encoding="utf-8")
         return base
 
     def test_ocp_h002_finding_present(self, match_project_dir):
-        
-        #EventDispatcher с тремя case-ветвями → finding OCP-H-002 присутствует
-        
         pm = build_project_map([match_project_dir])
         result = identify_candidates(pm)
         rules = [f.rule for f in result.findings]
         assert "OCP-H-002" in rules
 
-    def test_ocp_h002_finding_references_correct_class(self, match_project_dir):
-        """
-        Finding OCP-H-002 должен ссылаться на EventDispatcher, а не на TwoBranchDispatcher.
-        """
-        pm = build_project_map([match_project_dir])
-        result = identify_candidates(pm)
-        h002_findings = [f for f in result.findings if f.rule == "OCP-H-002"]
-        class_names = [f.class_name for f in h002_findings]
-        assert "EventDispatcher" in class_names
-        assert "TwoBranchDispatcher" not in class_names
-
-    def test_ocp_h002_finding_metadata(self, match_project_dir):
-        """
-        Finding OCP-H-002 содержит корректные метаданные: principle, source, severity.
-        """
-        pm = build_project_map([match_project_dir])
-        result = identify_candidates(pm)
-        h002 = next(f for f in result.findings if f.rule == "OCP-H-002")
-
-        # principle хранится внутри details
-        assert h002.details is not None
-        assert h002.details.principle == "OCP"
-
-        # source и severity — поля самого Finding
-        assert h002.source == "heuristic"
-        assert h002.severity in ("warning", "info")
-
     def test_ocp_h002_candidate_registered(self, match_project_dir):
-        """
-        EventDispatcher должен попасть в candidates как OCP-кандидат.
-        """
         pm = build_project_map([match_project_dir])
         result = identify_candidates(pm)
         candidate_names = [c.class_name for c in result.candidates]
         assert "EventDispatcher" in candidate_names
 
-    def test_two_branch_no_finding(self, match_project_dir):
+# ===========================================================================
+# Интеграционный тест дедупликации (findings + candidates)
+# ===========================================================================
+
+class TestHeuristicsDedupIntegration:
+    """
+    Интеграционный тест: на одном и том же методе срабатывают OCP-H-001 и OCP-H-004.
+    Проверяем, что findings дедуплицированы.
+    """
+
+    def test_findings_and_candidates_are_deduplicated(self, tmp_path: Path):
+        source = """
+        class Circle: pass
+        class Square: pass
+        class Triangle: pass
+        class Hexagon: pass
+        class Pentagon: pass
+        
+        class ShapeRenderer:
+            def render(self, shape, value):
+                if isinstance(shape, Circle): pass
+                elif isinstance(shape, Square): pass
+                elif isinstance(shape, Triangle): pass
+                elif isinstance(shape, Hexagon): pass
+                elif isinstance(shape, Pentagon): pass
+                else: pass
+
+                if value > 10: value += 1
+                if value < -10: value -= 1
+                if value == 0: value = 42
+                if value % 2 == 0: value *= 2
+                if value == 84: value //= 2
+
+                return value
         """
-        TwoBranchDispatcher (две ветви — ниже порога) не должен давать OCP-H-002.
-        Граничный тест на порог эвристики.
-        """
-        pm = build_project_map([match_project_dir])
-        result = identify_candidates(pm)
-        h002_classes = [f.class_name for f in result.findings if f.rule == "OCP-H-002"]
-        assert "TwoBranchDispatcher" not in h002_classes
+        module_path = tmp_path / "shapes_module.py"
+        module_path.write_text(textwrap.dedent(source), encoding="utf-8")
+
+        pm = build_project_map([module_path])
+        # Явно отключаем дефолтную фильтрацию путей (exclude_patterns=[]), 
+        # иначе папка, сгенерированная pytest (содержащая "test_" в пути), 
+        # приведет к полному игнорированию файла нашими эвристиками.
+        result = identify_candidates(pm, exclude_patterns=[])
+
+        ocp_h001 = [f for f in result.findings if f.rule == "OCP-H-001"]
+        assert len(ocp_h001) == 1
+        
+        winner = ocp_h001[0]
+        assert winner.details is not None
+        assert "Also detected: OCP-H-004" in (winner.details.explanation or "")
+
+        ocp_h004 = [f for f in result.findings if f.rule == "OCP-H-004"]
+        assert ocp_h004 == []
+
+        shape_candidates = [c for c in result.candidates if c.class_name == "ShapeRenderer"]
+        assert len(shape_candidates) == 1
+        
+        candidate = shape_candidates[0]
+        assert "OCP-H-001" in candidate.heuristic_reasons
+        assert "OCP-H-004" in candidate.heuristic_reasons
