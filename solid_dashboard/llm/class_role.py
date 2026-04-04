@@ -1,7 +1,7 @@
 # ===================================================================================================
 # Классификатор ролей классов для эвристического анализа SOLID
 #
-# Определяет ClassRole — категорию класса по его структуре в AST — и функцию classify_class(), 
+# Определяет ClassRole — категорию класса по его структуре в AST — и функцию classify_class(),
 # которую используют эвристики LSP/OCP, чтобы не запускаться на инфраструктурных или конфигурационных классах
 #
 # Классы ролей:
@@ -34,26 +34,34 @@ class ClassRole(Enum):
 # Известные инфраструктурные базовые классы
 # ---------------------------------------------------------------------------
 
-# Базы Pydantic / pydantic-settings / SQLAlchemy / Django ORM.
+# Базы Pydantic / pydantic-settings / SQLAlchemy.
 # Класс, наследующий от любого из них, получает роль INFRA_MODEL или CONFIG.
+#
+# Политика включения имён в этот список:
+#   - Имя должно быть достаточно специфичным, чтобы не давать false positive
+#     на доменные классы с совпадающим именем базы
+#   - Слишком generic-имена ("Base", "Model", "Schema") намеренно исключены:
+#     такие классы корректно детектируются через InfraScore (сигналы __tablename__,
+#     Column(), Field(), AnnAssign ratio), а не по имени базы
 _KNOWN_INFRA_BASES: frozenset[str] = frozenset({
     # Pydantic v1 / v2
     "BaseModel",
     "GenericModel",
-    # pydantic-settings
+    # pydantic-settings — также присутствует в _KNOWN_CONFIG_BASES;
+    # дублирование намеренное: CONFIG-проверка идет раньше в classify_class(),
+    # но InfraScore должен знать об этой базе для нестандартных иерархий
     "BaseSettings",
-    # SQLAlchemy (классический и declarative)
-    # "Base" удалено: слишком generic — одного имени недостаточно для сигнала
-    # SQLAlchemy Base корректно определится через InfraScore:
-    # __tablename__ (+1) + Column()/mapped_column() (+1) = 2, порог достигнут
+    # SQLAlchemy declarative API (современный стиль)
     "DeclarativeBase",
     "DeclarativeBaseNoMeta",
     "MappedAsDataclass",
-    "Model",  # часто используется в проектах как алиас Base
-    # Django ORM
-    "Model",
-    # attrs / marshmallow (реже, но встречаются)
-    "Schema",
+    # "Base" намеренно не включен: слишком generic
+    # "Model" намеренно не включен: слишком generic, риск false positive
+    #   на доменные классы вида class PaymentModel(Model)
+    #   Django/SQLAlchemy Model детектируется через InfraScore:
+    #   __tablename__ (+1) + Column()/mapped_column() (+1) >= порога
+    # "Schema" намеренно не включен: слишком generic для marshmallow;
+    #   marshmallow-классы детектируются через AnnAssign ratio + Field() сигналы
 })
 
 _KNOWN_CONFIG_BASES: frozenset[str] = frozenset({
