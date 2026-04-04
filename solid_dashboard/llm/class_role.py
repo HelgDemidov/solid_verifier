@@ -90,18 +90,92 @@ def _extract_base_names(class_node: ast.ClassDef) -> list[str]:
     return names
 
 
+def _is_docstring_node(node: ast.stmt) -> bool:
+# ---------------------------------------------------------------------------
+# Возвращает True, если узел является docstring-выражением
+# Docstring — это Expr, содержащий строковую константу
+# ---------------------------------------------------------------------------
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+
+
+def _is_trivial_body(body: list[ast.stmt]) -> bool:
+# ---------------------------------------------------------------------------
+# Проверяет, является ли тело метода тривиальным — то есть допустимым
+# для абстрактного метода в интерфейсе
+#
+# Тривиальные паттерны (после необязательного пропуска начальной docstring):
+#   - pass
+#   - ... (Ellipsis)
+#   - raise NotImplementedError
+#   - raise NotImplementedError("сообщение")
+#   - только docstring (тело = одна строковая константа)
+# ---------------------------------------------------------------------------
+    # Пропускаем начальную docstring если она есть — стандартный паттерн
+    # документирования абстрактных методов: def foo(self): """..."""\n pass
+    effective = list(body)
+    if effective and _is_docstring_node(effective[0]):
+        effective = effective[1:]
+
+    # Тело состояло только из docstring — тривиально
+    if not effective:
+        return True
+
+    # Допускаем ровно один оставшийся тривиальный узел
+    if len(effective) != 1:
+        return False
+
+    stmt = effective[0]
+
+    # pass
+    if isinstance(stmt, ast.Pass):
+        return True
+
+    # ... (Ellipsis-константа)
+    if (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Constant)
+        and stmt.value.value is ...
+    ):
+        return True
+
+    # raise NotImplementedError или raise NotImplementedError("msg")
+    if isinstance(stmt, ast.Raise) and stmt.exc is not None:
+        exc = stmt.exc
+        if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
+            return True
+        if (
+            isinstance(exc, ast.Call)
+            and isinstance(exc.func, ast.Name)
+            and exc.func.id == "NotImplementedError"
+        ):
+            return True
+
+    return False
+
+
 def _is_pure_interface(class_node: ast.ClassDef) -> bool:
 # ---------------------------------------------------------------------------
 # Возвращает True, если класс является чистым интерфейсом/контрактом
 # Критерии (все должны выполняться):
 #   1. Хотя бы один FunctionDef в теле класса
-#   2. Все FunctionDef задекорированы @abstractmethod ИЛИ имеют тривиальное тело (pass / ... / 1 raise NotImplementedError)
+#   2. Все FunctionDef задекорированы @abstractmethod ИЛИ имеют тривиальное тело
+#      (pass / ... / raise NotImplementedError / docstring / docstring + одно из перечисленного)
 #   3. Нет не-абстрактных методов с реальной логикой
 #
 # Отличает:
 #   class IFoo(ABC):           # PURE_INTERFACE — все методы абстрактны
 #       @abstractmethod
 #       def process(self): ...
+#
+#   class IFoo(ABC):           # PURE_INTERFACE — docstring + pass допустимы
+#       @abstractmethod
+#       async def process(self) -> None:
+#           """Docstring."""
+#           pass
 #
 # от:
 #   class Base(ABC):           # DOMAIN — есть реальный __init__
@@ -128,40 +202,13 @@ def _is_pure_interface(class_node: ast.ClassDef) -> bool:
         if has_abstractmethod:
             continue  # Этот метод — контрактный, окей
 
-        # Проверяем тривиальное тело: pass / ... / raise NotImplementedError
-        body = func.body
-        if len(body) == 1:
-            stmt = body[0]
-            # pass
-            if isinstance(stmt, ast.Pass):
-                continue
-            # ...
-            if (
-                isinstance(stmt, ast.Expr)
-                and isinstance(stmt.value, ast.Constant)
-                and stmt.value.value is ...
-            ):
-                continue
-            # raise NotImplementedError или raise NotImplementedError("msg")
-            if isinstance(stmt, ast.Raise) and stmt.exc is not None:
-                exc = stmt.exc
-                if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
-                    continue
-                if (
-                    isinstance(exc, ast.Call)
-                    and isinstance(exc.func, ast.Name)
-                    and exc.func.id == "NotImplementedError"
-                ):
-                    continue
-            # Одиночная docstring
-            if (
-                isinstance(stmt, ast.Expr)
-                and isinstance(stmt.value, ast.Constant)
-                and isinstance(stmt.value.value, str)
-            ):
-                continue
+        # Метод без @abstractmethod — проверяем тело на тривиальность
+        # Тривиальные тела (pass, ..., raise NotImplementedError, docstring,
+        # docstring + одно из перечисленного) допустимы в интерфейсе
+        if _is_trivial_body(func.body):
+            continue
 
-        # Тело многострочное или нетривиальное — это реальный метод
+        # Тело нетривиальное — это реальный метод, класс не интерфейс
         return False
 
     return True
