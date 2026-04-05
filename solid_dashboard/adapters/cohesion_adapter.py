@@ -98,7 +98,7 @@ class CohesionAdapter(IAnalyzer):
 
         # значения LCOM4 только по concrete-классам с methods_count >= 2
         cohesion_values_multi_method: List[float] = []
-        analyzed_classes_multi_method = 0
+        concrete_multi_method_count = 0  # число concrete-классов с methods_count >= 2
 
         low_cohesion_count = 0
         concrete_classes_count = 0  # счетчик concrete-классов, попавших в агрегаты
@@ -129,7 +129,7 @@ class CohesionAdapter(IAnalyzer):
 
                 if methods_count >= 2:
                     cohesion_values_multi_method.append(cohesion_score)
-                    analyzed_classes_multi_method += 1
+                    concrete_multi_method_count += 1
 
                 # используем конфигурируемый порог вместо захардкоженного 1
                 if lcom4 > low_cohesion_threshold:
@@ -157,7 +157,7 @@ class CohesionAdapter(IAnalyzer):
             # среднее только по concrete-классам с methods_count >= 2
             "mean_cohesion_multi_method": round(mean_cohesion_multi, 2),
             # сколько concrete-классов реально попало во второе среднее
-            "analyzed_classes_count": analyzed_classes_multi_method,
+            "analyzed_classes_count": concrete_multi_method_count,
             "low_cohesion_count": low_cohesion_count,
             # порог, использованный при подсчете low_cohesion_count — для прозрачности отчета
             "low_cohesion_threshold": low_cohesion_threshold,
