@@ -458,20 +458,13 @@
     "lizard_used": true
   },
   "cohesion": {
-    "total_classes_analyzed": 14,
-    "mean_cohesion_all": 1.29,
-    "mean_cohesion_multi_method": 1.67,
-    "analyzed_classes_count": 6,
-    "low_cohesion_count": 3,
+    "total_classes_analyzed": 10,
+    "mean_cohesion_all": 1.1,
+    "mean_cohesion_multi_method": 1.25,
+    "analyzed_classes_count": 4,
+    "low_cohesion_count": 1,
     "low_cohesion_threshold": 1,
     "classes": [
-      {
-        "name": "BaseProcessor",
-        "methods_count": 1,
-        "cohesion_score": 1.0,
-        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
-        "lineno": 3
-      },
       {
         "name": "BadProcessor",
         "methods_count": 1,
@@ -499,27 +492,6 @@
         "cohesion_score": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
         "lineno": 17
-      },
-      {
-        "name": "IArticleRepository",
-        "methods_count": 3,
-        "cohesion_score": 3.0,
-        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
-        "lineno": 7
-      },
-      {
-        "name": "ISearchClient",
-        "methods_count": 1,
-        "cohesion_score": 1.0,
-        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
-        "lineno": 7
-      },
-      {
-        "name": "IUserRepository",
-        "methods_count": 2,
-        "cohesion_score": 2.0,
-        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
-        "lineno": 6
       },
       {
         "name": "Article",
