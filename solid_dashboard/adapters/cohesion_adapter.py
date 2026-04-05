@@ -277,7 +277,7 @@ class CohesionAdapter(IAnalyzer):
 
         # --- 3. считаем abstractmethod-методы среди non-dunder методов ---
         # non-dunder: все методы, кроме __xxx__ (магические методы не участвуют в классификации)
-        non_dunder_methods: List[ast.FunctionDef] = []
+        non_dunder_count = 0
         abstract_method_count = 0
 
         for node in class_node.body:
@@ -285,27 +285,18 @@ class CohesionAdapter(IAnalyzer):
                 continue
             method_name: str = node.name
             if method_name.startswith("__") and method_name.endswith("__"):
-                # магические методы не участвуют в классификации interface/abstract
                 continue
-            non_dunder_methods.append(node)
+            non_dunder_count += 1  # просто считаем, узел не храним
 
-            # проверяем наличие декоратора @abstractmethod
             for dec in node.decorator_list:
-                if (isinstance(dec, ast.Name) and dec.id == "abstractmethod") or (
-                    isinstance(dec, ast.Attribute) and dec.attr == "abstractmethod"
-                ):
+                if (...):
                     abstract_method_count += 1
                     break
 
-        if not non_dunder_methods:
-            # ABC без non-dunder методов — считаем интерфейсом (маркерный класс)
+        if non_dunder_count == 0:
             return "interface"
-
-        if abstract_method_count == len(non_dunder_methods):
-            # все non-dunder методы абстрактны — чистый интерфейс
+        if abstract_method_count == non_dunder_count:
             return "interface"
-
-        # наследуется от ABC/Protocol, но есть конкретные методы — абстрактный класс
         return "abstract"
 
     def _build_method_info(self, func_node: ast.AST) -> MethodInfo:
