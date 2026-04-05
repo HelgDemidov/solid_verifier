@@ -13,9 +13,10 @@
 #    - dead_nodes  — подлинно неиспользуемые узлы (нет ни входящих, ни исходящих ребер)
 #    - остальные   — нормально связанные узлы графа
 # 5. Confidence-маркировка ребер (Вариант B):
-#    - "high" — ребро надежное, источник однозначен
-#    - "low"  — ребро ненадежное: блок содержит кратные [U]-вхождения, признак слияния
-#               нескольких сущностей с одинаковым именем (name collision artifact pyan3)
+#    - "high" — ребро надежное: источник однозначен И цель не является suspicious-узлом
+#    - "low"  — ребро ненадежное по одному из двух признаков:
+#               (a) блок-источник содержит кратные [U]-вхождения (name collision в источнике)
+#               (b) цель является suspicious-узлом (cascaded propagation)
 # ===================================================================================================
 
 from __future__ import annotations
@@ -105,7 +106,7 @@ class Pyan3Adapter(IAnalyzer):
         #    в блоке более одного раза (до де-дупликации).
         suspicious_blocks = _detect_suspicious_blocks(raw_output)
 
-        # 6. Второй проход: парсим узлы и ребра, выставляем confidence
+        # 6. Второй проход: парсим узлы и ребра, выставляем confidence по источнику
         nodes: Set[str] = set()
         edges: List[Dict[str, str]] = []
 
@@ -142,19 +143,17 @@ class Pyan3Adapter(IAnalyzer):
             if not _VALID_PY_NAME.match(used_name):
                 continue
 
-            # Исправление 4: фильтрация self-loop ребер (узел ссылается на самого себя)
+            # Фильтрация self-loop ребер (узел ссылается на самого себя)
             if used_name == current_src:
                 continue
 
             nodes.add(used_name)
 
-            # Вариант B: confidence-маркировка
-            # Блок помечен как suspicious если содержит кратные [U]-вхождения —
-            # признак слияния нескольких сущностей в один text-блок (name collision)
+            # Confidence по источнику: если блок suspicious — ребро ненадежно
             confidence = "low" if current_src in suspicious_blocks else "high"
             edges.append({"from": current_src, "to": used_name, "confidence": confidence})
 
-        # Санити-чек вынесен из цикла: узлы есть, но ребра не построены — признак сломанного парсера
+        # Санити-чек: узлы есть, но ребра не построены — признак сломанного парсера
         if nodes and not edges:
             sample_lines = [ln for ln in raw_output.splitlines() if ln.strip()][:6]
             parser_warning = (
@@ -186,11 +185,22 @@ class Pyan3Adapter(IAnalyzer):
             for (src, dst), conf in best_confidence.items()
         ]
 
+        # 7. Cascaded propagation: понижаем confidence до "low" если ЦЕЛЬ является suspicious-узлом
+        #
+        #    Обоснование: если цель ребра является suspicious-узлом (name collision), то
+        #    downstream-потребитель, прибыв по этому ребру, попадает в амбигуозный узел
+        #    и может считать результат достоверным, тогда как это не так.
+        #    Операция монотонна: только понижает confidence, никогда не повышает.
+        #    Применяется ПОСЛЕ де-дупликации, чтобы не нарушать ее логику.
+        for e in edges:
+            if e["confidence"] == "high" and e["to"] in suspicious_blocks:
+                e["confidence"] = "low"
+
         # Разбивка по confidence для итоговой статистики
         high_edges = [e for e in edges if e["confidence"] == "high"]
         low_edges  = [e for e in edges if e["confidence"] == "low"]
 
-        # Исправление 1: разделение узлов на root_nodes и dead_nodes
+        # Разделение узлов на root_nodes и dead_nodes
         incoming_count: Dict[str, int] = {n: 0 for n in nodes}
         for e in edges:
             dst = e["to"]
