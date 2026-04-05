@@ -12,6 +12,10 @@
 #    - root_nodes  — точки входа (нет входящих, есть исходящие ребра; это ожидаемо)
 #    - dead_nodes  — подлинно неиспользуемые узлы (нет ни входящих, ни исходящих ребер)
 #    - остальные   — нормально связанные узлы графа
+# 5. Confidence-маркировка ребер (Вариант B):
+#    - "high" — ребро надежное, источник однозначен
+#    - "low"  — ребро ненадежное: блок содержит кратные [U]-вхождения, признак слияния
+#               нескольких сущностей с одинаковым именем (name collision artifact pyan3)
 # ===================================================================================================
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ import warnings
 import os       # работа с файловой системой и путями
 import re       # регулярки для валидации имен узлов и парсинга вывода pyan3
 import subprocess  # запуск pyan3 как CLI-инструмента
+from collections import Counter  # подсчет кратных [U]-вхождений для confidence-детектора
 from typing import Any, Dict, List, Set, Optional
 
 from solid_dashboard.interfaces.analyzer import IAnalyzer  # общий протокол адаптеров пайплайна
@@ -88,6 +93,19 @@ class Pyan3Adapter(IAnalyzer):
             )
 
         raw_output = completed.stdout
+
+        # 5. Первый проход: детектируем блоки с name collision (confidence-детектор Варианта B)
+        #
+        #    Механика ложных ребер в pyan3 text-режиме:
+        #    Когда несколько сущностей с одинаковым коротким именем (например, метод
+        #    UserService.login и router-функция login) существуют в анализируемом коде,
+        #    pyan3 сливает их в один text-блок под общим именем "login". В результате блок
+        #    получает [U]-ребра сразу от нескольких сущностей, и часть ребер становится
+        #    ложными (cross-attribution). Признак слияния: одно и то же [U]-имя встречается
+        #    в блоке более одного раза (до де-дупликации).
+        suspicious_blocks = _detect_suspicious_blocks(raw_output)
+
+        # 6. Второй проход: парсим узлы и ребра, выставляем confidence
         nodes: Set[str] = set()
         edges: List[Dict[str, str]] = []
 
@@ -129,7 +147,12 @@ class Pyan3Adapter(IAnalyzer):
                 continue
 
             nodes.add(used_name)
-            edges.append({"from": current_src, "to": used_name})
+
+            # Вариант B: confidence-маркировка
+            # Блок помечен как suspicious если содержит кратные [U]-вхождения —
+            # признак слияния нескольких сущностей в один text-блок (name collision)
+            confidence = "low" if current_src in suspicious_blocks else "high"
+            edges.append({"from": current_src, "to": used_name, "confidence": confidence})
 
         # Санити-чек вынесен из цикла: узлы есть, но ребра не построены — признак сломанного парсера
         if nodes and not edges:
@@ -141,9 +164,6 @@ class Pyan3Adapter(IAnalyzer):
             )
             warnings.warn(parser_warning, RuntimeWarning, stacklevel=2)
 
-        # Грязный хардкод "app.routers" удален.
-        # Адаптер возвращает чистый граф вызовов оставляя фильтрацию потребителю.
-
         used_nodes: Set[str] = set()
         for e in edges:
             used_nodes.add(e["from"])
@@ -151,12 +171,24 @@ class Pyan3Adapter(IAnalyzer):
 
         nodes = used_nodes | nodes
 
-        # Де-дупликация ребер
-        unique_edges: Set[tuple[str, str]] = set()
+        # Де-дупликация ребер: при совпадении (from, to, confidence) — схлопываем
+        # При конфликте confidence для одной пары (from, to) — сохраняем "high" (более строгое)
+        best_confidence: Dict[tuple[str, str], str] = {}
         for e in edges:
-            unique_edges.add((e["from"], e["to"]))
+            key = (e["from"], e["to"])
+            current_conf = best_confidence.get(key)
+            # "high" побеждает "low" при дубликатах с разным confidence
+            if current_conf is None or (e["confidence"] == "high" and current_conf == "low"):
+                best_confidence[key] = e["confidence"]
 
-        edges = [{"from": src, "to": dst} for src, dst in unique_edges]
+        edges = [
+            {"from": src, "to": dst, "confidence": conf}
+            for (src, dst), conf in best_confidence.items()
+        ]
+
+        # Разбивка по confidence для итоговой статистики
+        high_edges = [e for e in edges if e["confidence"] == "high"]
+        low_edges  = [e for e in edges if e["confidence"] == "low"]
 
         # Исправление 1: разделение узлов на root_nodes и dead_nodes
         incoming_count: Dict[str, int] = {n: 0 for n in nodes}
@@ -181,17 +213,19 @@ class Pyan3Adapter(IAnalyzer):
 
         node_list = sorted(list(nodes))
 
-        # Исправление 2: возвращаемый словарь дополнен root_nodes-полями
         return {
             "is_success": True,
             "node_count": len(node_list),
             "edge_count": len(edges),
+            "edge_count_high": len(high_edges),
+            "edge_count_low": len(low_edges),
             "nodes": node_list,
             "edges": edges,
             "dead_node_count": len(dead_nodes),
             "dead_nodes": dead_nodes,
             "root_node_count": len(root_nodes),
             "root_nodes": root_nodes,
+            "suspicious_blocks": sorted(suspicious_blocks),
             "raw_output": raw_output,
         }
 
@@ -203,11 +237,63 @@ class Pyan3Adapter(IAnalyzer):
             "error": message,
             "node_count": 0,
             "edge_count": 0,
+            "edge_count_high": 0,
+            "edge_count_low": 0,
             "nodes": [],
             "edges": [],
             "dead_node_count": 0,
             "dead_nodes": [],
             "root_node_count": 0,
             "root_nodes": [],
+            "suspicious_blocks": [],
             "raw_output": raw_output,
         }
+
+
+def _detect_suspicious_blocks(raw_output: str) -> Set[str]:
+    """Первый проход по raw_output: возвращает множество имен блоков,
+    в которых хотя бы одно [U]-имя встречается более одного раза (до де-дупликации).
+    Это признак слияния нескольких сущностей в один text-блок (name collision pyan3).
+    Self-loop имена (used == block_name) намеренно исключены из проверки —
+    они фильтруются отдельно и не являются признаком cross-attribution.
+    """
+    suspicious: Set[str] = set()
+    current_block: Optional[str] = None
+    block_used_counts: Counter = Counter()
+
+    for line in raw_output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if not line.startswith(" "):
+            # Завершаем предыдущий блок: проверяем накопленные счетчики
+            if current_block is not None:
+                for name, cnt in block_used_counts.items():
+                    # Кратные вхождения НЕ-self имени — признак cross-attribution
+                    if cnt > 1 and name != current_block:
+                        suspicious.add(current_block)
+                        break
+
+            # Начинаем новый блок
+            if _VALID_PY_NAME.match(stripped) and not stripped.upper().startswith(_PYAN3_DIAG_PREFIXES):
+                current_block = stripped
+                block_used_counts = Counter()
+            else:
+                current_block = None
+                block_used_counts = Counter()
+            continue
+
+        if stripped.startswith("[U]") and current_block is not None:
+            used = stripped[3:].strip()
+            if used and _VALID_PY_NAME.match(used):
+                block_used_counts[used] += 1
+
+    # Обрабатываем последний блок в файле
+    if current_block is not None:
+        for name, cnt in block_used_counts.items():
+            if cnt > 1 and name != current_block:
+                suspicious.add(current_block)
+                break
+
+    return suspicious
