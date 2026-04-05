@@ -69,7 +69,7 @@ The LLM layer is implemented separately from `IAnalyzer` and is invoked directly
   Integrates with `import-linter` through its stable CLI (`lint-imports`). The adapter **dynamically generates a temporary configuration file** (`.importlinter_auto_*`), injecting the `root_packages` based on `package_root` and translating `ignore_dirs` into `ignore_imports` on the fly. After running the isolated CLI process, it parses the output — stripping ANSI terminal colors — and forms a structured JSON report of broken/kept contracts.
 
 - **`pyan3_adapter.py`**  
-  Uses `pyan3` to build a call graph and identify potential **dead code**. During refactoring, this adapter was stripped of global environment state mutations (removed `os.chdir` calls), making it absolutely safe and project-agnostic. FastAPI-specific glue code is filtered out to avoid false positives.
+  The adapter uses `pyan3` to build a static call graph and identify potentially unused code. The key architectural decision is running `pyan3` via `subprocess` with the `cwd` parameter instead of `os.chdir`, keeping the adapter stateless and project-agnostic. Python files are collected manually with `ignore_dirs` filtering, ensuring `.venv`, tests, and tooling directories are never included. The adapter implements a **two-pass parsing model** over `pyan3`'s text output: the first pass detects blocks with name collisions (identified by duplicate `[U]`-entries within a block before deduplication); the second pass builds the graph and assigns a `"high"` / `"low"` confidence label to each edge. An edge receives `"low"` if its source block contains a collision or its target is a suspicious node (cascaded propagation). Nodes are categorised into three groups: `root_nodes` (no incoming edges, has outgoing — entry points), `dead_nodes` (no edges at all — genuinely unused code), and normally connected nodes.
 
 ### LLM layer: heuristics and adapter
 
@@ -427,6 +427,7 @@ All dependencies are pinned in `requirements.txt` to stable versions compatible 
 
   - Extract SOLID Verifier into a standalone package (`pip install solid-verifier`) while preserving the current adapter and LLM architecture.
   - Integrate with IDEs / VS Code for interactive browsing of LSP/OCP candidates and contextual LLM recommendations directly in the editor.
+  - Switch to `pyan3 --dot` adapter instead of `--text` to eliminate ~100% of name collisions at the tool level.
 
 - **Long-term tasks**
 
