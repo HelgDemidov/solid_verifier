@@ -116,6 +116,8 @@ class CohesionAdapter(IAnalyzer):
                 "name": class_info.name,
                 "methods_count": methods_count,
                 "cohesion_score": cohesion_score,
+                # нормализованная связность: 1.0 = идеально связный, < 1.0 = несвязный
+                "cohesion_score_norm": round(1.0 / cohesion_score, 4) if cohesion_score > 1.0 else 1.0,
                 "filepath": class_info.filepath,
                 "lineno": class_info.lineno,
                 "class_kind": class_info.kind,
