@@ -463,6 +463,7 @@
     "mean_cohesion_multi_method": 1.67,
     "analyzed_classes_count": 6,
     "low_cohesion_count": 3,
+    "low_cohesion_threshold": 1,
     "classes": [
       {
         "name": "BaseProcessor",
