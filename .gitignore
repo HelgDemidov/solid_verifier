@@ -19,6 +19,5 @@ htmlcov/
 .solid-cache/
 report.html
 report.json
-solid_report.log
 cohesion_debug.log
 solid_config.json
