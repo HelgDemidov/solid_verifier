@@ -10,7 +10,8 @@
 # 3. Построение графа связности для каждого класса: методы связаны, если делят атрибут
 #    или явно вызывают друг друга (через self.method() или cls.method()).
 # 4. Вычисление LCOM4 через DFS (поиск в глубину) — подсчет количества несвязных компонент в графе методов класса.
-# 5. Агрегация метрик (meanCohesionAll, meanCohesionMultimethod, lowCohesionCount) для формирования сводки отчета пайплайна.
+# 5. Агрегация метрик (mean_cohesion_all, mean_cohesion_multi_method, low_cohesion_count)
+#    только для concrete-классов — интерфейсы и абстрактные классы в метрики не включаются.
 # ===================================================================================================
 
 
@@ -92,14 +93,15 @@ class CohesionAdapter(IAnalyzer):
         # считаем LCOM4 для каждого класса и формируем результирующий список
         class_results: List[Dict[str, Any]] = []
 
-        # сырые значения LCOM4 по всем классам, где methods_count > 0
+        # сырые значения LCOM4 — только concrete-классы, где methods_count > 0
         cohesion_values_all: List[float] = []
 
-        # значения LCOM4 только по классам с methods_count >= 2
+        # значения LCOM4 только по concrete-классам с methods_count >= 2
         cohesion_values_multi_method: List[float] = []
         analyzed_classes_multi_method = 0
 
         low_cohesion_count = 0
+        concrete_classes_count = 0  # счетчик concrete-классов, попавших в агрегаты
 
         for class_info in classes_info:
             lcom4, methods_count = self._compute_lcom4(class_info)
@@ -109,26 +111,31 @@ class CohesionAdapter(IAnalyzer):
 
             cohesion_score = float(lcom4)
 
+            # добавляем class_kind в каждый элемент выходного списка классов
             class_results.append({
                 "name": class_info.name,
                 "methods_count": methods_count,
                 "cohesion_score": cohesion_score,
                 "filepath": class_info.filepath,
                 "lineno": class_info.lineno,
+                "class_kind": class_info.kind,
             })
 
-            # добавляем в "сырую" выборку всех классов с методами
-            cohesion_values_all.append(cohesion_score)
+            # агрегаты считаются только по concrete-классам — интерфейсы не засоряют метрики
+            if class_info.kind == "concrete":
+                concrete_classes_count += 1
 
-            # отдельно собираем многометодные классы (methods_count >= 2)
-            if methods_count >= 2:
-                cohesion_values_multi_method.append(cohesion_score)
-                analyzed_classes_multi_method += 1
+                cohesion_values_all.append(cohesion_score)
 
-            # используем конфигурируемый порог вместо захардкоженного 1
-            if lcom4 > low_cohesion_threshold:
-                low_cohesion_count += 1
+                if methods_count >= 2:
+                    cohesion_values_multi_method.append(cohesion_score)
+                    analyzed_classes_multi_method += 1
 
+                # используем конфигурируемый порог вместо захардкоженного 1
+                if lcom4 > low_cohesion_threshold:
+                    low_cohesion_count += 1
+
+        # total_classes_analyzed — полный счетчик всех kinds для информативности
         total_classes_analyzed = len(class_results)
 
         if cohesion_values_all:
@@ -143,11 +150,13 @@ class CohesionAdapter(IAnalyzer):
 
         return {
             "total_classes_analyzed": total_classes_analyzed,
-            # среднее по всем классам с хотя бы одним методом
+            # сколько concrete-классов вошло в агрегаты
+            "concrete_classes_count": concrete_classes_count,
+            # среднее по concrete-классам с хотя бы одним методом
             "mean_cohesion_all": round(mean_cohesion_all, 2),
-            # среднее только по классам с methods_count >= 2
+            # среднее только по concrete-классам с methods_count >= 2
             "mean_cohesion_multi_method": round(mean_cohesion_multi, 2),
-            # сколько классов реально попало во второе среднее
+            # сколько concrete-классов реально попало во второе среднее
             "analyzed_classes_count": analyzed_classes_multi_method,
             "low_cohesion_count": low_cohesion_count,
             # порог, использованный при подсчете low_cohesion_count — для прозрачности отчета
