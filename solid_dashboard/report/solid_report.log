@@ -470,81 +470,101 @@
         "name": "BadProcessor",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
         "lineno": 11,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "PostgresArticleRepository",
         "methods_count": 3,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
         "lineno": 11,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "PostgresUserRepository",
         "methods_count": 2,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
         "lineno": 8,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "ScopusHTTPClient",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
         "lineno": 17,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "Article",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
         "lineno": 10,
-        "class_kind": "dataclass"
+        "class_kind": "dataclass",
+        "excluded_from_aggregation": true
       },
       {
         "name": "User",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
         "lineno": 9,
-        "class_kind": "dataclass"
+        "class_kind": "dataclass",
+        "excluded_from_aggregation": true
       },
       {
         "name": "UserRegisterRequest",
         "methods_count": 2,
         "cohesion_score": 2.0,
+        "cohesion_score_norm": 0.5,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
         "lineno": 8,
-        "class_kind": "dataclass"
+        "class_kind": "dataclass",
+        "excluded_from_aggregation": true
       },
       {
         "name": "ArticleService",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
         "lineno": 6,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "SearchService",
         "methods_count": 1,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
         "lineno": 8,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       },
       {
         "name": "UserService",
         "methods_count": 4,
         "cohesion_score": 1.0,
+        "cohesion_score_norm": 1.0,
         "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
         "lineno": 7,
-        "class_kind": "concrete"
+        "class_kind": "concrete",
+        "excluded_from_aggregation": false
       }
     ]
   },
