@@ -1,0 +1,888 @@
+{
+  "radon": {
+    "total_items": 50,
+    "mean_cc": 1.82,
+    "high_complexity_count": 0,
+    "items": [
+      {
+        "name": "password_strength",
+        "type": "method",
+        "complexity": 9,
+        "rank": "B",
+        "lineno": 17,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "search",
+        "type": "method",
+        "complexity": 8,
+        "rank": "B",
+        "lineno": 27,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "find_articles",
+        "type": "function",
+        "complexity": 7,
+        "rank": "B",
+        "lineno": 45,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+        "parameter_count": 4
+      },
+      {
+        "name": "process",
+        "type": "method",
+        "complexity": 5,
+        "rank": "A",
+        "lineno": 14,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_articles_paginated",
+        "type": "method",
+        "complexity": 4,
+        "rank": "A",
+        "lineno": 10,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "save_many",
+        "type": "method",
+        "complexity": 3,
+        "rank": "A",
+        "lineno": 22,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_current_user",
+        "type": "function",
+        "complexity": 3,
+        "rank": "A",
+        "lineno": 30,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "login",
+        "type": "method",
+        "complexity": 3,
+        "rank": "A",
+        "lineno": 30,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "decode_access_token",
+        "type": "function",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 28,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_total_count",
+        "type": "method",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 46,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "register",
+        "type": "function",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 50,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "login",
+        "type": "function",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 61,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "passwords_match",
+        "type": "method",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 33,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "find_and_save",
+        "type": "method",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "register",
+        "type": "method",
+        "complexity": 2,
+        "rank": "A",
+        "lineno": 13,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "database_url_str",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 35,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "lifespan",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "root",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 65,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+        "parameter_count": 0
+      },
+      {
+        "name": "get_db_session",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 8,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py",
+        "parameter_count": 0
+      },
+      {
+        "name": "hash_password",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "verify_password",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 18,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "create_access_token",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 21,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "process",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 6,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 12,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_all",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 10,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "create",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 13,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_by_email",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 19,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 21,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "save_many",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 10,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_all",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "get_total_count",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 24,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "search",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 13,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "create",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 10,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_by_email",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 15,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "__repr__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 28,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "__repr__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 20,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_article_service",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 19,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_scopus_client",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 23,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+        "parameter_count": 0
+      },
+      {
+        "name": "get_search_service",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 27,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_articles",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 36,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "health_db",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 16,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_user_service",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 24,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "get_me",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 76,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 1
+      },
+      {
+        "name": "password_reset_request",
+        "type": "function",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 80,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 7,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 11,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+        "parameter_count": 3
+      },
+      {
+        "name": "__init__",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 10,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "get_current_user",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 42,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "parameter_count": 2
+      },
+      {
+        "name": "request_password_reset",
+        "type": "method",
+        "complexity": 1,
+        "rank": "A",
+        "lineno": 46,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "parameter_count": 2
+      }
+    ],
+    "lizard_used": true
+  },
+  "cohesion": {
+    "total_classes_analyzed": 14,
+    "mean_cohesion_all": 1.29,
+    "mean_cohesion_multi_method": 1.67,
+    "analyzed_classes_count": 6,
+    "low_cohesion_count": 3,
+    "classes": [
+      {
+        "name": "BaseProcessor",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "lineno": 3
+      },
+      {
+        "name": "BadProcessor",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "lineno": 11
+      },
+      {
+        "name": "PostgresArticleRepository",
+        "methods_count": 3,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "lineno": 11
+      },
+      {
+        "name": "PostgresUserRepository",
+        "methods_count": 2,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+        "lineno": 8
+      },
+      {
+        "name": "ScopusHTTPClient",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+        "lineno": 17
+      },
+      {
+        "name": "IArticleRepository",
+        "methods_count": 3,
+        "cohesion_score": 3.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+        "lineno": 7
+      },
+      {
+        "name": "ISearchClient",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+        "lineno": 7
+      },
+      {
+        "name": "IUserRepository",
+        "methods_count": 2,
+        "cohesion_score": 2.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+        "lineno": 6
+      },
+      {
+        "name": "Article",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+        "lineno": 10
+      },
+      {
+        "name": "User",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+        "lineno": 9
+      },
+      {
+        "name": "UserRegisterRequest",
+        "methods_count": 2,
+        "cohesion_score": 2.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+        "lineno": 8
+      },
+      {
+        "name": "ArticleService",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+        "lineno": 6
+      },
+      {
+        "name": "SearchService",
+        "methods_count": 1,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+        "lineno": 8
+      },
+      {
+        "name": "UserService",
+        "methods_count": 4,
+        "cohesion_score": 1.0,
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+        "lineno": 7
+      }
+    ]
+  },
+  "import_graph": {
+    "nodes": [
+      {
+        "id": "routers",
+        "label": "routers",
+        "ca": 0,
+        "ce": 5,
+        "instability": 1.0
+      },
+      {
+        "id": "services",
+        "label": "services",
+        "ca": 1,
+        "ce": 2,
+        "instability": 0.67
+      },
+      {
+        "id": "infrastructure",
+        "label": "infrastructure",
+        "ca": 1,
+        "ce": 3,
+        "instability": 0.75
+      },
+      {
+        "id": "models",
+        "label": "models",
+        "ca": 4,
+        "ce": 1,
+        "instability": 0.2
+      },
+      {
+        "id": "interfaces",
+        "label": "interfaces",
+        "ca": 2,
+        "ce": 1,
+        "instability": 0.33
+      },
+      {
+        "id": "db_libs",
+        "label": "db_libs",
+        "ca": 3,
+        "ce": 0,
+        "instability": 0.0
+      },
+      {
+        "id": "web_libs",
+        "label": "web_libs",
+        "ca": 1,
+        "ce": 0,
+        "instability": 0.0
+      }
+    ],
+    "edges": [
+      {
+        "source": "infrastructure",
+        "target": "db_libs"
+      },
+      {
+        "source": "infrastructure",
+        "target": "interfaces"
+      },
+      {
+        "source": "infrastructure",
+        "target": "models"
+      },
+      {
+        "source": "interfaces",
+        "target": "models"
+      },
+      {
+        "source": "models",
+        "target": "db_libs"
+      },
+      {
+        "source": "routers",
+        "target": "db_libs"
+      },
+      {
+        "source": "routers",
+        "target": "infrastructure"
+      },
+      {
+        "source": "routers",
+        "target": "models"
+      },
+      {
+        "source": "routers",
+        "target": "services"
+      },
+      {
+        "source": "routers",
+        "target": "web_libs"
+      },
+      {
+        "source": "services",
+        "target": "interfaces"
+      },
+      {
+        "source": "services",
+        "target": "models"
+      }
+    ],
+    "debug_info": {
+      "package": "app",
+      "total_modules": 44,
+      "layer_prefixes_used": {
+        "routers": [
+          "app.routers"
+        ],
+        "services": [
+          "app.services"
+        ],
+        "infrastructure": [
+          "app.infrastructure"
+        ],
+        "models": [
+          "app.models"
+        ],
+        "interfaces": [
+          "app.interfaces"
+        ]
+      },
+      "external_layer_prefixes_used": {
+        "db_libs": [
+          "sqlalchemy"
+        ],
+        "web_libs": [
+          "fastapi",
+          "starlette"
+        ]
+      }
+    }
+  },
+  "import_linter": {
+    "is_success": true,
+    "contracts_checked": 1,
+    "broken_contracts": 0,
+    "kept_contracts": 1,
+    "violations": [],
+    "raw_output": "=============\nImport Linter\n=============\n\n\n---------\nContracts\n---------\n\nAnalyzed 32 files, 42 dependencies.\n-----------------------------------\n\nScopus API layered architecture KEPT\n\nContracts: 1 kept, 0 broken."
+  },
+  "pyan3": {
+    "is_success": true,
+    "node_count": 46,
+    "edge_count": 0,
+    "nodes": [
+      "Article",
+      "BadProcessor",
+      "PaginatedArticleResponse",
+      "PostgresArticleRepository",
+      "PostgresUserRepository",
+      "ScopusHTTPClient",
+      "User",
+      "__init__",
+      "app.config",
+      "app.infrastructure.database",
+      "app.infrastructure.postgres_article_repo",
+      "app.infrastructure.postgres_user_repo",
+      "app.infrastructure.scopus_client",
+      "app.interfaces.article_repository",
+      "app.interfaces.search_client",
+      "app.interfaces.user_repository",
+      "app.main",
+      "app.models.article",
+      "app.models.user",
+      "app.routers.articles",
+      "app.routers.health",
+      "app.routers.users",
+      "app.services.article_service",
+      "app.services.search_service",
+      "app.services.user_service",
+      "create",
+      "find_and_save",
+      "find_articles",
+      "get_all",
+      "get_article_service",
+      "get_articles",
+      "get_articles_paginated",
+      "get_by_email",
+      "get_current_user",
+      "get_me",
+      "get_scopus_client",
+      "get_search_service",
+      "get_user_service",
+      "health_db",
+      "login",
+      "password_reset_request",
+      "password_strength",
+      "register",
+      "request_password_reset",
+      "save_many",
+      "search"
+    ],
+    "edges": [],
+    "dead_node_count": 46,
+    "dead_nodes": [
+      "Article",
+      "BadProcessor",
+      "PaginatedArticleResponse",
+      "PostgresArticleRepository",
+      "PostgresUserRepository",
+      "ScopusHTTPClient",
+      "User",
+      "__init__",
+      "app.config",
+      "app.infrastructure.database",
+      "app.infrastructure.postgres_article_repo",
+      "app.infrastructure.postgres_user_repo",
+      "app.infrastructure.scopus_client",
+      "app.interfaces.article_repository",
+      "app.interfaces.search_client",
+      "app.interfaces.user_repository",
+      "app.main",
+      "app.models.article",
+      "app.models.user",
+      "app.routers.articles",
+      "app.routers.health",
+      "app.routers.users",
+      "app.services.article_service",
+      "app.services.search_service",
+      "app.services.user_service",
+      "create",
+      "find_and_save",
+      "find_articles",
+      "get_all",
+      "get_article_service",
+      "get_articles",
+      "get_articles_paginated",
+      "get_by_email",
+      "get_current_user",
+      "get_me",
+      "get_scopus_client",
+      "get_search_service",
+      "get_user_service",
+      "health_db",
+      "login",
+      "password_reset_request",
+      "password_strength",
+      "register",
+      "request_password_reset",
+      "save_many",
+      "search"
+    ],
+    "raw_output": "Article\n    [U] Base\nBadProcessor\n    [U] BaseProcessor\nPaginatedArticleResponse\n    [U] ArticleResponse\nPostgresArticleRepository\n    [U] IArticleRepository\nPostgresUserRepository\n    [U] IUserRepository\nScopusHTTPClient\n    [U] ISearchClient\nUser\n    [U] Base\n__init__\n    [U] IArticleRepository\n    [U] IArticleRepository\n    [U] ISearchClient\n    [U] IUserRepository\napp.config\n    [U] Settings\napp.infrastructure.database\n    [U] database_url_str\napp.infrastructure.postgres_article_repo\n    [U] Article\n    [U] IArticleRepository\napp.infrastructure.postgres_user_repo\n    [U] IUserRepository\n    [U] User\napp.infrastructure.scopus_client\n    [U] Article\n    [U] ISearchClient\napp.interfaces.article_repository\n    [U] Article\napp.interfaces.search_client\n    [U] Article\napp.interfaces.user_repository\n    [U] User\napp.main\n    [U] app.routers.articles\n    [U] app.routers.health\n    [U] app.routers.users\n    [U] lifespan\napp.models.article\n    [U] Base\napp.models.user\n    [U] Base\napp.routers.articles\n    [U] ArticleResponse\n    [U] ArticleService\n    [U] PaginatedArticleResponse\n    [U] PostgresArticleRepository\n    [U] ScopusHTTPClient\n    [U] SearchService\n    [U] User\n    [U] get_article_service\n    [U] get_current_user\n    [U] get_db_session\n    [U] get_scopus_client\n    [U] get_search_service\napp.routers.health\n    [U] get_db_session\napp.routers.users\n    [U] PasswordResetRequest\n    [U] PostgresUserRepository\n    [U] TokenResponse\n    [U] User\n    [U] UserRegisterRequest\n    [U] UserResponse\n    [U] UserService\n    [U] decode_access_token\n    [U] get_current_user\n    [U] get_db_session\n    [U] get_user_service\napp.services.article_service\n    [U] ArticleResponse\n    [U] IArticleRepository\n    [U] PaginatedArticleResponse\napp.services.search_service\n    [U] Article\n    [U] IArticleRepository\n    [U] ISearchClient\napp.services.user_service\n    [U] IUserRepository\n    [U] User\n    [U] UserRegisterRequest\n    [U] create_access_token\n    [U] hash_password\n    [U] verify_password\ncreate\n    [U] User\n    [U] User\nfind_and_save\n    [U] Article\n    [U] save_many\n    [U] search\nfind_articles\n    [U] ArticleResponse\n    [U] ScopusHTTPClient\n    [U] SearchService\n    [U] User\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] find_and_save\n    [U] get_current_user\n    [U] get_scopus_client\n    [U] get_search_service\nget_all\n    [U] Article\n    [U] Article\nget_article_service\n    [U] ArticleService\n    [U] PostgresArticleRepository\n    [U] __init__\n    [U] __init__\n    [U] get_db_session\nget_articles\n    [U] ArticleService\n    [U] PaginatedArticleResponse\n    [U] get_article_service\n    [U] get_articles_paginated\nget_articles_paginated\n    [U] ArticleResponse\n    [U] PaginatedArticleResponse\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] get_all\n    [U] get_total_count\nget_by_email\n    [U] User\n    [U] User\nget_current_user\n    [U] User\n    [U] User\n    [U] UserService\n    [U] decode_access_token\n    [U] get_by_email\n    [U] get_current_user\n    [U] get_current_user\n    [U] get_user_service\nget_me\n    [U] User\n    [U] get_current_user\nget_scopus_client\n    [U] ScopusHTTPClient\n    [U] __init__\nget_search_service\n    [U] PostgresArticleRepository\n    [U] ScopusHTTPClient\n    [U] SearchService\n    [U] __init__\n    [U] __init__\n    [U] get_db_session\n    [U] get_scopus_client\nget_user_service\n    [U] PostgresUserRepository\n    [U] UserService\n    [U] __init__\n    [U] __init__\n    [U] get_db_session\nhealth_db\n    [U] get_db_session\nlogin\n    [U] TokenResponse\n    [U] UserService\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] create_access_token\n    [U] get_by_email\n    [U] get_user_service\n    [U] login\n    [U] login\n    [U] verify_password\npassword_reset_request\n    [U] PasswordResetRequest\n    [U] UserService\n    [U] get_user_service\n    [U] request_password_reset\npassword_strength\n    [U] search\nregister\n    [U] User\n    [U] User\n    [U] UserRegisterRequest\n    [U] UserRegisterRequest\n    [U] UserService\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] create\n    [U] get_by_email\n    [U] get_user_service\n    [U] hash_password\n    [U] register\n    [U] register\nrequest_password_reset\n    [U] get_by_email\nsave_many\n    [U] Article\n    [U] Article\nsearch\n    [U] Article\n    [U] Article\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n    [U] __init__\n"
+  },
+  "heuristics": {
+    "project_map_summary": {
+      "classes": 22,
+      "interfaces": 3
+    },
+    "heuristic_findings": [
+      {
+        "rule": "LSP-H-001",
+        "file": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "severity": "warning",
+        "message": "Overridden method 'process' raises NotImplementedError — substitutability is broken",
+        "source": "heuristic",
+        "class_name": "BadProcessor",
+        "line": null,
+        "details": {
+          "principle": "LSP",
+          "explanation": "Method 'process' overrides a parent method but raises NotImplementedError. Callers using the base type cannot substitute this class without catching unexpected exceptions. Also detected: OCP-H-001, OCP-H-004.",
+          "suggestion": "Implement the method according to the parent's contract, or reconsider whether this class should extend the parent at all.",
+          "analyzed_with": null,
+          "heuristic_corroboration": null,
+          "method_name": "process"
+        }
+      }
+    ],
+    "ocplsp_candidates": [
+      {
+        "class_name": "BadProcessor",
+        "file_path": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+        "source_code": "class BadProcessor(BaseProcessor):\n    # Кандидат для OCP-H-001 и LSP-H-001\n\n    def process(self, value: int) -> str:\n        # LSP-H-001: NotImplementedError в override-методе\n        if value < 0:\n            raise NotImplementedError(\"Negative values are not supported\")\n\n        # OCP-H-001: if/elif цепочка с isinstance\n        if isinstance(value, int):\n            return f\"int:{value}\"\n        elif isinstance(value, bool):\n            return f\"bool:{value}\"\n        elif isinstance(value, float):\n            return f\"float:{value}\"\n        else:\n            return \"unknown\"",
+        "candidate_type": "both",
+        "heuristic_reasons": [
+          "LSP-H-001",
+          "OCP-H-001",
+          "OCP-H-004"
+        ],
+        "priority": 7
+      },
+      {
+        "class_name": "PostgresArticleRepository",
+        "file_path": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+        "source_code": "class PostgresArticleRepository(IArticleRepository):\n    def __init__(self, session: AsyncSession):\n        self.session = session\n\n    async def get_all(self, limit: int, offset: int) -> List[Article]:\n        # SQL: SELECT * FROM articles LIMIT {limit} OFFSET {offset};\n        stmt = select(Article).limit(limit).offset(offset)\n        result = await self.session.execute(stmt)\n        # Возвращаем список объектов\n        return list(result.scalars().all())\n\n    async def save_many(self, articles: List[Article]) -> None:\n        if not articles:\n            return\n        # Формируем значения для bulk insert\n        values = [\n            {\n                \"title\": a.title,\n                \"author\": a.author,\n                \"date\": a.date,\n                \"doi\": a.doi,\n                \"keyword\": a.keyword,\n            }\n            for a in articles\n        ]\n\n        stmt = (\n            insert(Article)\n            .values(values)\n            .on_conflict_do_nothing(index_elements=[\"doi\"])  # <- ключевая строка\n        )\n\n        await self.session.execute(stmt)\n        await self.session.commit()\n\n    async def get_total_count(self) -> int:\n        stmt = select(func.count(Article.id))\n        result = await self.session.execute(stmt)\n        return result.scalar() or 0",
+        "candidate_type": "both",
+        "heuristic_reasons": [],
+        "priority": 2
+      },
+      {
+        "class_name": "PostgresUserRepository",
+        "file_path": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+        "source_code": "class PostgresUserRepository(IUserRepository):\n    # Через __init__ мы передаем сессию БД внутрь репозитория\n    def __init__(self, session: AsyncSession):\n        self.session = session\n\n    async def create(self, user: User) -> User:\n        self.session.add(user)          # Добавляем в транзакцию\n        await self.session.commit()     # Сохраняем в БД\n        await self.session.refresh(user)# Обновляем объект (чтобы база выдала ему сгенерированный ID)\n        return user\n\n    async def get_by_email(self, email: str) -> User | None:\n        # Пишем SQL-запрос через Python (SELECT * FROM users WHERE email = ...)\n        stmt = select(User).where(User.email == email)\n        result = await self.session.execute(stmt)\n        # scalar_one_or_none() выдаст одну запись либо None\n        return result.scalar_one_or_none()",
+        "candidate_type": "both",
+        "heuristic_reasons": [],
+        "priority": 2
+      },
+      {
+        "class_name": "ScopusHTTPClient",
+        "file_path": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+        "source_code": "class ScopusHTTPClient(ISearchClient):\n    # Принимаем готовый httpx.AsyncClient снаружи (Dependency Injection).\n    # Клиент создается один раз при старте приложения (в Lifespan) и живет всегда.\n    # Это эффективнее, чем создавать новое соединение на каждый запрос.\n    def __init__(self, http_client: httpx.AsyncClient):\n        self._client = http_client\n        self.last_rate_limit: Optional[str] = None\n        self.last_rate_remaining: Optional[str] = None\n        self.last_rate_reset: Optional[str] = None\n\n    async def search(self, keyword: str, count: int = 25) -> List[Article]:\n        page_size = min(count, 25)\n\n        params = {\n            \"query\": f\"TITLE-ABS-KEY({keyword})\",\n            \"count\": page_size,\n            \"field\": SCOPUS_FIELDS,\n            \"apiKey\": settings.SCOPUS_API_KEY,\n        }\n\n        response = await self._client.get(SCOPUS_BASE_URL, params=params)\n\n        # сохраняем лимиты из заголовков\n        self.last_rate_limit = response.headers.get(\"X-RateLimit-Limit\")\n        self.last_rate_remaining = response.headers.get(\"X-RateLimit-Remaining\")\n        self.last_rate_reset = response.headers.get(\"X-RateLimit-Reset\")\n\n        response.raise_for_status()\n\n        data = response.json()\n        search_results = data.get(\"search-results\", {})\n        entries = search_results.get(\"entry\", []) or []\n\n        articles: List[Article] = []\n\n        for entry in entries:\n            title = entry.get(\"prism:publicationName\") or \"\"\n            creator = entry.get(\"dc:creator\")\n            cover_date_str = entry.get(\"prism:coverDate\")\n            doi = entry.get(\"prism:doi\")\n\n            if not cover_date_str:\n                continue\n\n            try:\n                cover_date = date.fromisoformat(cover_date_str)\n            except ValueError:\n                continue\n\n            article = Article(\n                title=title[:500],\n                author=creator[:255] if creator else None,\n                date=cover_date,\n                doi=doi[:255] if doi else None,\n                keyword=keyword[:100],\n            )\n            articles.append(article)\n\n        return articles",
+        "candidate_type": "both",
+        "heuristic_reasons": [],
+        "priority": 2
+      }
+    ]
+  },
+  "llm": {
+    "status": "success",
+    "findings": [],
+    "metadata": {
+      "candidates_processed": 0,
+      "candidates_skipped": 4,
+      "tokens_used": 4265,
+      "cache_hits": 0,
+      "parse_failures": 4,
+      "parse_partials": 0,
+      "parse_warnings": 4
+    }
+  }
+}
