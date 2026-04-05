@@ -31,7 +31,7 @@ from solid_dashboard.llm.heuristics._shared import (
     _compute_method_cc,
     _DEFAULT_EXCLUDE_PATTERNS,
 )
-from solid_dashboard.llm.types import ClassInfo, MethodSignature, ProjectMap
+from solid_dashboard.llm.types import ClassInfo, InterfaceInfo, MethodSignature, ProjectMap
 
 
 # ---------------------------------------------------------------------------
@@ -55,13 +55,24 @@ def _make_class_info(
     )
 
 
+def _make_interface_info(name: str, file_path: str = "app/interfaces.py") -> InterfaceInfo:
+    # Минимальный InterfaceInfo для регистрации в ProjectMap.interfaces
+    return InterfaceInfo(name=name, file_path=file_path, methods=[], implementations=[])
+
+
 def _make_project_map(
-    classes: dict | None = None,
+    classes: dict[str, ClassInfo] | None = None,
+    # Принимаем список имён для удобства тестов — конвертируем в dict[str, InterfaceInfo]
     interfaces: list[str] | None = None,
 ) -> ProjectMap:
+    interfaces_dict: dict[str, InterfaceInfo] = (
+        {name: _make_interface_info(name) for name in interfaces}
+        if interfaces
+        else {}
+    )
     return ProjectMap(
         classes=classes or {},
-        interfaces=interfaces or [],
+        interfaces=interfaces_dict,
     )
 
 
@@ -230,6 +241,8 @@ class TestMakeFinding:
             explanation="expl",
             suggestion="sugg",
         )
+        # Сначала сужаем Optional[FindingDetails] до FindingDetails
+        assert finding.details is not None
         assert finding.details.method_name is None
 
     def test_line_is_none(self):
@@ -270,7 +283,8 @@ class TestIsAbstractClass:
         """Класс с хотя бы одним is_abstract методом — абстрактный."""
         methods = [
             MethodSignature(
-                name="process", parameters=[], return_type=None,
+                # parameters — строка сигнатуры, как в types.py
+                name="process", parameters="", return_type=None,
                 is_override=False, is_abstract=True,
             )
         ]
@@ -283,7 +297,7 @@ class TestIsAbstractClass:
         """Конкретный класс без ABC и без абстрактных методов — не абстрактный."""
         methods = [
             MethodSignature(
-                name="run", parameters=[], return_type=None,
+                name="run", parameters="", return_type=None,
                 is_override=False, is_abstract=False,
             )
         ]
