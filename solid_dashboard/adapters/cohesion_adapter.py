@@ -17,10 +17,13 @@
 import ast
 import os
 import logging
-from dataclasses import dataclass, field  # Структуры данных для классов/методов
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
-from solid_dashboard.interfaces.analyzer import IAnalyzer  # явный импорт интерфейса
+from solid_dashboard.interfaces.analyzer import IAnalyzer
+
+# именованный логгер модуля — используется во всех методах адаптера
+logger = logging.getLogger(__name__)
 
 
 # ================================
@@ -30,24 +33,24 @@ from solid_dashboard.interfaces.analyzer import IAnalyzer  # явный импо
 @dataclass
 class MethodInfo:
     """Информация о методе внутри класса."""
-    name: str                     # Имя метода (get_user, create, ...)
-    lineno: int                   # Номер строки начала метода
-    is_async: bool                # Является ли метод async def
+    name: str                     # имя метода (get_user, create, ...)
+    lineno: int                   # номер строки начала метода
+    is_async: bool                # является ли метод async def
     decorator_kinds: List[str] = field(default_factory=list)
     # decorator_kinds: ["property", "classmethod", "staticmethod"]
 
-    # Какие атрибуты класса/экземпляра использует метод
+    # какие атрибуты класса/экземпляра использует метод
     used_attributes: Set[str] = field(default_factory=set)
-    # Какие методы этого же класса он вызывает (по имени)
+    # какие методы этого же класса он вызывает (по имени)
     called_methods: Set[str] = field(default_factory=set)
 
 
 @dataclass
 class ClassInfo:
     """Информация о классе: основа для расчета LCOM4."""
-    name: str                          # Имя класса (UserService, ArticleRepository, ...)
-    filepath: str                      # Абсолютный путь к файлу, где объявлен класс
-    lineno: int                        # Строка объявления class
+    name: str                          # имя класса (UserService, ArticleRepository, ...)
+    filepath: str                      # абсолютный путь к файлу, где объявлен класс
+    lineno: int                        # строка объявления class
     methods: List[MethodInfo] = field(default_factory=list)
     attributes: Set[str] = field(default_factory=set)
     # attributes: множество имен полей класса/экземпляра
@@ -64,35 +67,37 @@ class CohesionAdapter(IAnalyzer):
         return "cohesion"
 
     def run(self, target_dir: str, context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
-        # комментарий (ru): параметр context требуется интерфейсом IAnalyzer но не используется здесь
+        # параметр context требуется интерфейсом IAnalyzer, но не используется здесь
         _ = context
 
         target_path = Path(target_dir).resolve()
-        target_path = Path(target_dir).resolve()
-        
-        # Достаем список игнорируемых папок из конфига
+
+        # читаем порог low-cohesion из конфига; дефолт = 1 (LCOM4 > 1 означает несвязный класс)
+        low_cohesion_threshold: int = int(config.get("cohesion_threshold", 1))
+
+        # достаем список игнорируемых папок из конфига
         ignore_dirs_cfg = config.get("ignore_dirs") or []
         ignore_dirs = set(name.strip() for name in ignore_dirs_cfg if name and name.strip())
-        
-        # Передаем ignore_dirs в сборщик
+
+        # передаем ignore_dirs в сборщик
         classes_info: List[ClassInfo] = self._collect_classes(target_path, ignore_dirs)
 
-        # Считаем LCOM4 для каждого класса и формируем результирующий список
+        # считаем LCOM4 для каждого класса и формируем результирующий список
         class_results: List[Dict[str, Any]] = []
 
-        # Сырые значения LCOM4 по всем классам, где methods_count > 0
+        # сырые значения LCOM4 по всем классам, где methods_count > 0
         cohesion_values_all: List[float] = []
 
-        # Значения LCOM4 только по классам с methods_count >= 2
+        # значения LCOM4 только по классам с methods_count >= 2
         cohesion_values_multi_method: List[float] = []
         analyzed_classes_multi_method = 0
 
-        low_cohesion_count = 0  # по-прежнему считаем по всем классам с methods_count > 0
+        low_cohesion_count = 0
 
         for class_info in classes_info:
             lcom4, methods_count = self._compute_lcom4(class_info)
             if methods_count == 0:
-                # Классы без методов для метрики не интересны
+                # классы без методов для метрики не интересны
                 continue
 
             cohesion_score = float(lcom4)
@@ -105,16 +110,16 @@ class CohesionAdapter(IAnalyzer):
                 "lineno": class_info.lineno,
             })
 
-            # 1) Добавляем в "сырую" выборку всех классов с методами
+            # добавляем в "сырую" выборку всех классов с методами
             cohesion_values_all.append(cohesion_score)
 
-            # 2) Отдельно собираем многометодные классы (methods_count >= 2)
+            # отдельно собираем многометодные классы (methods_count >= 2)
             if methods_count >= 2:
                 cohesion_values_multi_method.append(cohesion_score)
                 analyzed_classes_multi_method += 1
 
-            # low_cohesion_count считаем по всем классам с methods_count > 0
-            if lcom4 > 1:
+            # используем конфигурируемый порог вместо захардкоженного 1
+            if lcom4 > low_cohesion_threshold:
                 low_cohesion_count += 1
 
         total_classes_analyzed = len(class_results)
@@ -131,13 +136,15 @@ class CohesionAdapter(IAnalyzer):
 
         return {
             "total_classes_analyzed": total_classes_analyzed,
-            # Среднее по всем классам с хотя бы одним методом
+            # среднее по всем классам с хотя бы одним методом
             "mean_cohesion_all": round(mean_cohesion_all, 2),
-            # Среднее только по классам с methods_count >= 2
+            # среднее только по классам с methods_count >= 2
             "mean_cohesion_multi_method": round(mean_cohesion_multi, 2),
-            # Сколько классов реально попало во второе среднее
+            # сколько классов реально попало во второе среднее
             "analyzed_classes_count": analyzed_classes_multi_method,
             "low_cohesion_count": low_cohesion_count,
+            # порог, использованный при подсчете low_cohesion_count — для прозрачности отчета
+            "low_cohesion_threshold": low_cohesion_threshold,
             "classes": class_results,
         }
 
@@ -149,8 +156,8 @@ class CohesionAdapter(IAnalyzer):
         classes: List[ClassInfo] = []
 
         for root, dirs, files in os.walk(target_path):
-            # Архитектурный трюк: in-place модификация списка dirs 
-            # запрещает os.walk спускаться в игнорируемые директории
+            # архитектурный трюк: in-place модификация dirs запрещает
+            # os.walk спускаться в игнорируемые директории
             dirs[:] = [d for d in dirs if d not in ignore_dirs]
 
             for filename in files:
@@ -161,28 +168,21 @@ class CohesionAdapter(IAnalyzer):
                 try:
                     source = file_path.read_text(encoding="utf-8")
                 except OSError as e:
-                    # комментарий (ru): логируем проблему чтения файла вместо тихого пропуска
-
-                    logging.warning(
-                        "CohesionAdapter: cannot read %s: %s", file_path, e
-                    )
+                    logger.warning("CohesionAdapter: cannot read %s: %s", file_path, e)
                     continue
                 try:
                     tree = ast.parse(source, filename=str(file_path))
                 except SyntaxError as e:
-                    # комментарий (ru): синтаксически невалидный файл пропускаем с предупреждением
-                    logging.getLogger(__name__).warning(
-                        "CohesionAdapter: syntax error in %s: %s", file_path, e
-                    )
+                    logger.warning("CohesionAdapter: syntax error in %s: %s", file_path, e)
                     continue
 
-                # Проходим по всем классам в файле
+                # проходим по всем классам в файле
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef):
                         class_info = self._build_class_info(node, file_path)
-                        # Сначала соберем self.xxx из __init__, чтобы добавить в attributes
+                        # сначала собираем self.xxx из __init__, чтобы добавить в attributes
                         self._collect_instance_attributes_from_init(class_info, node)
-                        # Затем наполним used_attributes / called_methods
+                        # затем наполняем used_attributes / called_methods
                         self._populate_method_usage(class_info, node)
                         classes.append(class_info)
 
@@ -191,9 +191,7 @@ class CohesionAdapter(IAnalyzer):
     def _build_class_info(self, class_node: ast.ClassDef, file_path: Path) -> ClassInfo:
         """
         Строит ClassInfo для одного ast.ClassDef:
-        - имя класса
-        - путь к файлу
-        - строка объявления
+        - имя класса, путь к файлу, строка объявления
         - список методов
         - множество атрибутов класса (уровень class body)
         """
@@ -205,19 +203,19 @@ class CohesionAdapter(IAnalyzer):
             attributes=set(),
         )
 
-        # Проходим только по прямым потомкам class_node.body:
+        # проходим только по прямым потомкам class_node.body
         for node in class_node.body:
-            # 1) Методы класса (обычные и async)
+            # 1) методы класса (обычные и async)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 method_info = self._build_method_info(node)
                 class_info.methods.append(method_info)
 
-            # 2) Присваивания на уровне класса (атрибуты)
+            # 2) присваивания на уровне класса (атрибуты)
             if isinstance(node, ast.Assign):
                 attr_names = self._extract_names_from_assign(node)
                 class_info.attributes.update(attr_names)
 
-            # 3) Аннотированные присваивания (Pydantic/BaseModel, dataclasses)
+            # 3) аннотированные присваивания (Pydantic/BaseModel, dataclasses)
             if isinstance(node, ast.AnnAssign):
                 attr_name = self._extract_name_from_ann_assign(node)
                 if attr_name is not None:
@@ -229,9 +227,8 @@ class CohesionAdapter(IAnalyzer):
         """
         Строит MethodInfo для ast.FunctionDef или ast.AsyncFunctionDef.
         Определяет:
-        - имя метода
-        - async / sync
-        - типы декораторов: property, classmethod, staticmethod.
+        - имя метода, async/sync
+        - типы декораторов: property, classmethod, staticmethod
         """
         is_async = isinstance(func_node, ast.AsyncFunctionDef)
         name = getattr(func_node, "name", "<unknown>")
@@ -239,7 +236,7 @@ class CohesionAdapter(IAnalyzer):
 
         decorator_kinds: List[str] = []
 
-        # Разбираем список декораторов: @property, @classmethod, @staticmethod
+        # разбираем список декораторов: @property, @classmethod, @staticmethod
         for dec in getattr(func_node, "decorator_list", []):
             kind = self._classify_decorator(dec)
             if kind is not None:
@@ -257,20 +254,18 @@ class CohesionAdapter(IAnalyzer):
     def _classify_decorator(self, dec: ast.AST) -> Optional[str]:
         """
         Классифицирует декоратор в одно из значений:
-        - "property"
-        - "classmethod"
-        - "staticmethod"
+        "property", "classmethod", "staticmethod".
         Если это другой декоратор, возвращает None.
         """
         # @property
         if isinstance(dec, ast.Name) and dec.id == "property":
             return "property"
 
-        # @classmethod / @staticmethod в виде @classmethod / @staticmethod
+        # @classmethod / @staticmethod
         if isinstance(dec, ast.Name) and dec.id in ("classmethod", "staticmethod"):
             return dec.id
 
-        # Варианты вида @something.classmethod
+        # варианты вида @something.classmethod
         if isinstance(dec, ast.Attribute) and isinstance(dec.value, ast.Name):
             full_name = f"{dec.value.id}.{dec.attr}"
             if full_name.endswith(".classmethod"):
@@ -288,17 +283,17 @@ class CohesionAdapter(IAnalyzer):
         """
         Извлекает имена атрибутов из простого присваивания на уровне класса.
         Примеры:
-          foo = 1              -> ["foo"]
-          x, y = 1, 2          -> ["x", "y"]
+          foo = 1           -> ["foo"]
+          x, y = 1, 2       -> ["x", "y"]
         Все, что не является простым Name, игнорируется.
         """
         names: List[str] = []
 
         for target in node.targets:
-            # Простое имя: foo = 1
+            # простое имя: foo = 1
             if isinstance(target, ast.Name):
                 names.append(target.id)
-            # Список имен: x, y = 1, 2
+            # список имен: x, y = 1, 2
             elif isinstance(target, ast.Tuple):
                 for elt in target.elts:
                     if isinstance(elt, ast.Name):
@@ -310,10 +305,10 @@ class CohesionAdapter(IAnalyzer):
         """
         Извлекает имя атрибута из аннотированного присваивания на уровне класса.
         Примеры:
-          name: str              -> "name"
-          age: int = 0           -> "age"
-          score: int = Field()   -> "score"
-        Если target не является ast.Name (например, self.x), возвращаем None.
+          name: str           -> "name"
+          age: int = 0        -> "age"
+          score: int = Field() -> "score"
+        Если target не является ast.Name, возвращаем None.
         """
         target = node.target
 
@@ -337,7 +332,7 @@ class CohesionAdapter(IAnalyzer):
             if node.name != "__init__":
                 continue
 
-            # Ищем в теле __init__ присваивания self.xxx = ...
+            # ищем в теле __init__ присваивания self.xxx = ...
             for stmt in ast.walk(node):
                 if isinstance(stmt, ast.Assign):
                     for target in stmt.targets:
@@ -345,7 +340,7 @@ class CohesionAdapter(IAnalyzer):
                         if attr_name is not None:
                             class_info.attributes.add(attr_name)
                 elif isinstance(stmt, ast.AnnAssign):
-                    # Случаи вроде self.xxx: Type = value
+                    # случаи вроде self.xxx: Type = value
                     attr_name = self._extract_instance_attr_from_target(stmt.target)
                     if attr_name is not None:
                         class_info.attributes.add(attr_name)
@@ -404,17 +399,16 @@ class CohesionAdapter(IAnalyzer):
         Считает LCOM4 для данного класса.
 
         Алгоритм:
-        - Берем только методы, кроме __init__ (по требованиям).
-        - Строим неориентированный граф:
-          - вершины = имена методов;
-          - ребра между методами A и B, если:
+        - берем только методы, кроме __init__ (LCOM4-конвенция)
+          и property-методов (они не участвуют в связности классов)
+        - строим неориентированный граф:
+          вершины = имена методов;
+          ребра между A и B, если:
             * used_attributes(A) ∩ used_attributes(B) != ∅, или
-            * A вызывает B или B вызывает A.
-        - LCOM4 = число связных компонент в этом графе.
-        - Если после фильтрации нет методов, возвращаем (0, 0).
+            * A вызывает B или B вызывает A
+        - LCOM4 = число связных компонент в этом графе
+        - если после фильтрации нет методов, возвращаем (0, 0)
         """
-        # комментарий (ru): исключаем __init__ из расчета (LCOM4-конвенция)
-        # комментарий (ru): также исключаем property-методы - они не участвуют в связности классов
         methods = [
             m for m in class_info.methods
             if m.name != "__init__" and "property" not in m.decorator_kinds
@@ -424,20 +418,20 @@ class CohesionAdapter(IAnalyzer):
         if methods_count == 0:
             return 0, 0
 
-        # Инициализируем граф: вершины -> множество соседей
+        # инициализируем граф: вершины -> множество соседей
         adjacency: Dict[str, Set[str]] = {m.name: set() for m in methods}
 
-        # 1. Ребра по общим атрибутам
+        # 1. ребра по общим атрибутам
         for i, m1 in enumerate(methods):
             for j in range(i + 1, len(methods)):
                 m2 = methods[j]
-                # Пересечение используемых атрибутов
+                # пересечение используемых атрибутов
                 if m1.used_attributes and m2.used_attributes:
                     if m1.used_attributes.intersection(m2.used_attributes):
                         adjacency[m1.name].add(m2.name)
                         adjacency[m2.name].add(m1.name)
 
-        # 2. Ребра по вызовам методов
+        # 2. ребра по вызовам методов
         name_to_method: Dict[str, MethodInfo] = {m.name: m for m in methods}
         for m in methods:
             for called in m.called_methods:
@@ -445,7 +439,7 @@ class CohesionAdapter(IAnalyzer):
                     adjacency[m.name].add(called)
                     adjacency[called].add(m.name)
 
-        # 3. Подсчет связных компонент (DFS)
+        # 3. подсчет связных компонент через итеративный DFS
         visited: Set[str] = set()
         components = 0
 
@@ -465,8 +459,7 @@ class CohesionAdapter(IAnalyzer):
                 components += 1
                 dfs(method_name)
 
-        lcom4_value = components
-        return lcom4_value, methods_count
+        return components, methods_count
 
 
 class _MethodUsageVisitor(ast.NodeVisitor):
@@ -474,8 +467,8 @@ class _MethodUsageVisitor(ast.NodeVisitor):
     AST-посетитель для одного метода класса.
     Собирает:
     - used_attributes: обращения к атрибутам класса/экземпляра
-      (self.field, cls.field), если field есть в class_attributes.
-    - called_methods: вызовы методов класса (self.method(), cls.method(), method()).
+      (self.field, cls.field), если field есть в class_attributes
+    - called_methods: вызовы методов класса (self.method(), cls.method(), method())
     """
 
     def __init__(self, class_attributes: Set[str], method_names: Set[str]) -> None:
@@ -485,7 +478,7 @@ class _MethodUsageVisitor(ast.NodeVisitor):
         self.used_attributes: Set[str] = set()
         self.called_methods: Set[str] = set()
 
-        # Имена, играющие роль self/cls (первый аргумент метода)
+        # имена, играющие роль self/cls (первый аргумент метода)
         self._self_like_names: Set[str] = set()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
@@ -511,7 +504,7 @@ class _MethodUsageVisitor(ast.NodeVisitor):
         считаем это использованием атрибута.
         """
         if isinstance(node.value, ast.Name):
-            base_name = node.value.id  # self / cls / другое имя
+            base_name = node.value.id
             attr_name = node.attr
 
             if base_name in self._self_like_names and attr_name in self.class_attributes:
@@ -531,7 +524,7 @@ class _MethodUsageVisitor(ast.NodeVisitor):
             if base_name in self._self_like_names and method_name in self.method_names:
                 self.called_methods.add(method_name)
 
-        # Прямой вызов method(...)
+        # прямой вызов method(...)
         if isinstance(node.func, ast.Name):
             method_name = node.func.id
             if method_name in self.method_names:
