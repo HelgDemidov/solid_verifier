@@ -17,8 +17,8 @@ from typing import Literal, Protocol, runtime_checkable
 
 import httpx
 
-from .types import LlmResponse
-from .errors import RetryableError, NonRetryableError
+from ..types import LlmResponse
+from ..errors import RetryableError, NonRetryableError
 
 logger = logging.getLogger(__name__)
 

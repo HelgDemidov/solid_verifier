@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .types import LlmResponse  # импортируем актуальный контрактный тип ответа LLM
+from ..types import LlmResponse  # импортируем актуальный контрактный тип ответа LLM
 
 logger = logging.getLogger(__name__)
 
