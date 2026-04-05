@@ -101,7 +101,8 @@ class CohesionAdapter(IAnalyzer):
         analyzed_classes_multi_method = 0
 
         low_cohesion_count = 0
-        concrete_classes_count = 0  # счетчик concrete-классов, попавших в агрегаты
+        concrete_classes_count = 0       # счетчик concrete-классов, попавших в агрегаты
+        low_cohesion_excluded_count = 0  # non-concrete классы, превысившие порог (но исключенные из агрегатов)
 
         for class_info in classes_info:
             lcom4, methods_count = self._compute_lcom4(class_info)
@@ -125,8 +126,8 @@ class CohesionAdapter(IAnalyzer):
                 "excluded_from_aggregation": class_info.kind != "concrete",
             })
 
-            # агрегаты считаются только по concrete-классам — интерфейсы не засоряют метрики
             if class_info.kind == "concrete":
+                # агрегаты считаются только по concrete-классам — интерфейсы не засоряют метрики
                 concrete_classes_count += 1
 
                 cohesion_values_all.append(cohesion_score)
@@ -135,9 +136,13 @@ class CohesionAdapter(IAnalyzer):
                     cohesion_values_multi_method.append(cohesion_score)
                     analyzed_classes_multi_method += 1
 
-                # используем конфигурируемый порог вместо захардкоженного 1
                 if lcom4 > low_cohesion_threshold:
                     low_cohesion_count += 1
+            else:
+                # для non-concrete классов (abstract / interface / dataclass) фиксируем
+                # нарушение порога отдельно — они не влияют на агрегаты, но сигнал полезен
+                if lcom4 > low_cohesion_threshold:
+                    low_cohesion_excluded_count += 1
 
         # total_classes_analyzed — полный счетчик всех kinds для информативности
         total_classes_analyzed = len(class_results)
@@ -163,6 +168,8 @@ class CohesionAdapter(IAnalyzer):
             # сколько concrete-классов реально попало во второе среднее
             "analyzed_classes_count": analyzed_classes_multi_method,
             "low_cohesion_count": low_cohesion_count,
+            # сколько non-concrete классов превысили порог, но были исключены из агрегатов
+            "low_cohesion_excluded_count": low_cohesion_excluded_count,
             # порог, использованный при подсчете low_cohesion_count — для прозрачности отчета
             "low_cohesion_threshold": low_cohesion_threshold,
             "classes": class_results,
