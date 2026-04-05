@@ -93,6 +93,9 @@ def main() -> None:
             logging.StreamHandler(),  # чтобы видеть то же самое в терминале
         ],
     )
+    # перехватываем все warnings.warn(..., RuntimeWarning) из адаптеров
+    # (radon_adapter, pyan3_adapter и будущих) и направляем их в logging-пайплайн
+    logging.captureWarnings(True)
 
     parser = argparse.ArgumentParser(description="SOLID-Verifier Dashboard")
     parser.add_argument(

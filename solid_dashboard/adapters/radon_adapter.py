@@ -14,6 +14,7 @@
 import subprocess
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Dict, Any
 from solid_dashboard.interfaces.analyzer import IAnalyzer  # явный импорт интерфейса
@@ -94,7 +95,15 @@ class RadonAdapter(IAnalyzer):
                         lizard_index[abspath] = {}
                     for func in fileinfo.function_list:
                         lizard_index[abspath][func.start_line] = func
-                except Exception:
+                except Exception as exc:
+                    # сбой индексации конкретного файла lizard не должен остановить пайплайн,
+                    # но должен быть виден в solid_pipeline.log для диагностики
+                    warnings.warn(
+                        f"[radon_adapter] lizard failed to index file "
+                        f"'{getattr(fileinfo, 'filename', '?')}': {exc}",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
                     continue
 
             for item in items:
@@ -106,8 +115,15 @@ class RadonAdapter(IAnalyzer):
                         liz_func = lizard_index.get(abspath, {}).get(lineno)
                         if liz_func:
                             item["parameter_count"] = liz_func.parameter_count
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        # сбой обогащения parameter_count для одной функции не критичен,
+                        # но фиксируем в лог чтобы отследить паттерн (например, match/case)
+                        warnings.warn(
+                            f"[radon_adapter] parameter_count enrichment failed "
+                            f"for '{filepath}':{lineno} — {exc}",
+                            RuntimeWarning,
+                            stacklevel=2,
+                        )
 
         total_items = len(items)
         mean_cc = round(total_cc / total_items, 2) if total_items > 0 else 0.0
