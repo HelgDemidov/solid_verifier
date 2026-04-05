@@ -631,6 +631,10 @@ class _MethodUsageVisitor(ast.NodeVisitor):
     - used_attributes: обращения к атрибутам класса/экземпляра
       (self.field, cls.field), если field есть в class_attributes
     - called_methods: вызовы методов класса (self.method(), cls.method(), method())
+
+    Важно: вложенные def/async def внутри метода намеренно НЕ обходятся.
+    Это предотвращает загрязнение графа LCOM4 атрибутами и вызовами из замыканий,
+    где первый аргумент (self/cls) принадлежит вложенной функции, а не классу.
     """
 
     def __init__(self, class_attributes: Set[str], method_names: Set[str]) -> None:
@@ -644,12 +648,20 @@ class _MethodUsageVisitor(ast.NodeVisitor):
         self._self_like_names: Set[str] = set()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
+        # регистрируем self-подобное имя только для корневого метода класса
         self._register_self_like_names(node)
-        self.generic_visit(node)
+        # обходим только прямые потомки тела — вложенные FunctionDef пропускаются,
+        # чтобы их 'self' не загрязнял граф LCOM4 внешнего метода
+        for stmt in node.body:
+            if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self.visit(stmt)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
+        # аналогично для async def — только прямые потомки тела
         self._register_self_like_names(node)
-        self.generic_visit(node)
+        for stmt in node.body:
+            if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self.visit(stmt)
 
     def _register_self_like_names(self, node: ast.AST) -> None:
         """Регистрируем имена, которые играют роль self/cls (первый параметр метода)."""
