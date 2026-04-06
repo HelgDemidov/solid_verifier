@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
+from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter, _classify_class
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +46,7 @@ def _classify(source: str, class_name: str) -> str:
     tree = ast.parse(textwrap.dedent(source))
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == class_name:
-            return CohesionAdapter()._classify_class(node)
+            return _classify_class(node)
     raise AssertionError(f"ClassDef '{class_name}' не найден в AST")
 
 
@@ -451,7 +451,7 @@ class TestNestedClasses:
         assert inner["cohesion_score"] == 1.0, "Inner: один метод → LCOM4 = 1"
 
     def test_inner_class_does_not_inherit_outer_attributes(self, tmp_path):
-        # Inner не должен видеть self.x из Outer даже при одинаковых именах атрибутов
+        # Inner не должен видеть self.shared из Outer даже при одинаковых именах атрибутов
         # Это проверяет что MRO-обогащение не смешивает вложенные классы
         result = _run(tmp_path, """
             class Outer:
@@ -473,7 +473,7 @@ class TestNestedClasses:
         assert inner["cohesion_score"] == 1.0
 
     def test_doubly_nested_class_collected(self, tmp_path):
-        # ast.walk рекурсивен — трёхуровневое вложение тоже обходится
+        # ast.walk рекурсивен — трехуровневое вложение тоже обходится
         result = _run(tmp_path, """
             class Level1:
                 class Level2:
@@ -482,7 +482,7 @@ class TestNestedClasses:
                             return "deep"
         """)
         names = [c["name"] for c in result["classes"]]
-        assert "Level3" in names, "Трёхуровневый nested класс должен быть найден"
+        assert "Level3" in names, "Трехуровневый nested класс должен быть найден"
 
     def test_concrete_count_includes_all_levels(self, tmp_path):
         # Все уровни вложения с concrete-классами включаются в concrete_classes_count
