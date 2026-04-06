@@ -1,18 +1,12 @@
-# conftest.py — общие fixtures и реэкспорт вспомогательных типов
-# для пакета тестов test_cohesion_adapter
+# conftest.py — общие fixtures для пакета тестов test_cohesion_adapter.
+# Вспомогательные типы (ClassInfo, classify_class) живут в helpers.py.
 import ast
 import textwrap
 import pytest
 from pathlib import Path
 from typing import cast
 
-from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter, ClassInfo
-
-from solid_dashboard.adapters.class_classifier import classify_class
-
-# ClassInfo и classify_class реэкспортируются отсюда как единственная точка импорта —
-# тестовые файлы делают `from .conftest import ClassInfo` без дублирования type: ignore
-__all__ = ["ClassInfo", "classify_class"]
+from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
 
 
 # парсим фрагмент кода и возвращаем первый ClassDef — удобно для unit-тестов

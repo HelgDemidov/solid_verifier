@@ -14,9 +14,8 @@ from typing import cast, Dict, List, Tuple
 
 from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
 
-# ClassInfo импортируется из conftest — единственное место с type: ignore;
-# прямой импорт из адаптера здесь не нужен
-from .conftest import ClassInfo # pyright: ignore[reportAttributeAccessIssue]
+# ClassInfo импортируется из helpers — единственная точка реэкспорта для тестового пакета
+from .helpers import ClassInfo
 
 
 # ---------------------------------------------------------------------------
