@@ -465,6 +465,15 @@
     "analyzed_classes_count": 3,
     "low_cohesion_count": 0,
     "low_cohesion_excluded_count": 1,
+    "low_cohesion_excluded_classes": [
+      {
+        "name": "UserRegisterRequest",
+        "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+        "lineno": 8,
+        "cohesion_score": 2.0,
+        "class_kind": "dataclass"
+      }
+    ],
     "low_cohesion_threshold": 1,
     "classes": [
       {
@@ -1578,7 +1587,7 @@
     "metadata": {
       "candidates_processed": 0,
       "candidates_skipped": 4,
-      "tokens_used": 4265,
+      "tokens_used": 4262,
       "cache_hits": 0,
       "parse_failures": 4,
       "parse_partials": 0,
