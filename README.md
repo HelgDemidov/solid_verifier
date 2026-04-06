@@ -24,7 +24,7 @@ The tool is project-agnostic: it can be reused across different Python codebases
   - Secure secret management (LLM keys are automatically loaded from a `.env` file, keeping the JSON config clean).
 - **Static metrics**:
   - **Complexity and maintainability** via `radon` (Cyclomatic Complexity, Maintainability Index).
-  - **Cohesion** via a custom **LCOM4** adapter based on Python’s built-in `ast` (with smart filtering of properties and utility methods to eliminate false positives).
+  - **Cohesion** via a custom **LCOM4** adapter based on Python's built-in `ast` (with smart filtering of properties and utility methods to eliminate false positives).
   - **Call graph and dead code** via `pyan3` (fully safe execution with no global environment state mutations).
 - **Architecture and dependencies**:
   - **Import graph** based on `grimp`.
@@ -60,7 +60,7 @@ The LLM layer is implemented separately from `IAnalyzer` and is invoked directly
   Uses `radon` to compute cyclomatic complexity and Maintainability Index, strictly limiting itself to the target directory. It additionally integrates `lizard` to extract **only** `parameter_count` and maximum nesting depth. Overlapping metrics are intentionally ignored.
 
 - **`cohesion_adapter.py`**  
-  A custom implementation of the **LCOM4** metric with no external dependencies, built directly on Python’s `ast`. It surgically traverses files, filtering them by `ignore_dirs`. It smartly handles `async` and Pydantic annotations, and purposefully **excludes `@property` methods** and `__init__` constructors. This radically reduces false positives and ensures mathematical precision in calculating class cohesion.
+  A custom, dependency-free implementation of the **LCOM4** cohesion metric built entirely on Python's built-in `ast`. The adapter operates in two passes: the **first pass** parses all target files and builds a global class index together with an inheritance map; the **second pass** enriches every class with attributes declared in its ancestor chain (resolving them from the index) and then re-runs `_MethodUsageVisitor` on the augmented attribute set. This ensures that inherited instance attributes are never incorrectly counted as disconnected nodes. The graph of method relationships is built from two types of edges: shared instance attributes (written or read via `self.*`) and direct inter-method calls (`self.method()`). `__init__` constructors are excluded from cohesion nodes to prevent artificial inflation of the connected-component count. `@property` methods and empty stubs (`pass`/`...`/docstring-only) are also excluded to eliminate structural false positives. `async def` methods and Pydantic field annotations are handled transparently. Class role classification is delegated to a dedicated `class_classifier.py` module — LCOM4 is computed and reported only for `concrete` classes, while abstract bases, protocols, interfaces, dataclasses, and infrastructure models are systematically skipped. When an ancestor class cannot be resolved from the index (e.g. third-party base), the adapter degrades gracefully without raising an error.
 
 - **`import_graph_adapter.py`**  
   Builds the import graph using `grimp`. It groups modules into layers based on the configuration, filters out ignored directories, identifies dependencies on third-party libraries (DIP), and calculates Martin stability metrics (`Ca`, `Ce`, `Instability`).
@@ -97,7 +97,7 @@ The updated set of AST heuristics focuses on domain classes and respects the rol
 | `OCP-H-004` | OCP       | High cyclomatic complexity + `isinstance` in domain methods |
 | `LSP-H-001` | LSP       | `raise NotImplementedError` in an overriding method         |
 | `LSP-H-002` | LSP       | Empty stub method (`pass`/only docstring/`...`) in subclass |
-| `LSP-H-003` | LSP       | `isinstance` checks on parameters of the base type          |
+| `LSP-H-003` | LSP       | `isinstance` checks on parameters of the base type         |
 | `LSP-H-004` | LSP       | Problematic child `__init__` vs parent constructor          |
 
 The key change: `LSP-H-004` no longer compares signatures against **pure interfaces**. If the base class has the `PURE_INTERFACE` or `MIXIN` role, adding parameters/logic to the child `__init__` is treated as a valid specialization and does not trigger an LSP violation.
@@ -106,7 +106,7 @@ The heuristic layer also implements a **multi-signal INFRA filter**: Pydantic/SQ
 
 **LLM adapter (LlmSolidAdapter)**
 
-`LlmSolidAdapter` still runs only for candidates selected by the heuristic layer, but the candidate list is now much smaller and “cleaner”:
+`LlmSolidAdapter` still runs only for candidates selected by the heuristic layer, but the candidate list is now much smaller and "cleaner":
 
 - In a typical project at the Scopus Search scale, only a handful of classes reach the OCP/LSP layer (4 candidates in the latest report), with one explicitly problematic demo class and the others acting as structural points of interest.
 - For each candidate, the adapter assembles an AST-based context, builds a prompt and sends it through `LlmGateway` to OpenRouter, then passes the response through a two-level ACL (transport + semantic parser).
@@ -177,7 +177,7 @@ Any failure at either level may partially or fully disable the LLM path for a pa
 
 #### Two sources of truth: heuristics and LLM
 
-After the heuristics refactor, the “two sources of truth” architecture became even more explicit.
+After the heuristics refactor, the "two sources of truth" architecture became even more explicit.
 
 **1. Static analysis and heuristics — source of coordinates and trust**
 
@@ -207,7 +207,7 @@ The LLM only sees pre-filtered candidates and is used as a **source of semantic 
 
 All LLM findings pass through the `Response Parser` (ACL-B), which strictly validates JSON and populates the `Finding` domain model. Key fields (`file`, `class_name`, `source="llm"`, rule, principle) are always derived from **heuristics** rather than free-form model text so that the trusted static layer remains leading.
 
-The result: static and LLM-based findings live in the same `Finding` list but with different “zones of responsibility”: coordinates and principle assignment are defined by statics, while explanations and recommendations come from the LLM.
+The result: static and LLM-based findings live in the same `Finding` list but with different "zones of responsibility": coordinates and principle assignment are defined by statics, while explanations and recommendations come from the LLM.
 
 #### LLM Finding Field Map
 
@@ -251,18 +251,21 @@ scopus_search_code/                           # Root directory of the analyzed p
 │       │   └── response_schema.json          # Strict JSON contract for model output
 │       ├── tests/                            # Unit and integration tests
 │       │   ├── fixtures/                     # Mock data and fake projects (sample_project)
-│       │   └── llm/                          # Unit and E2E tests for LLM integration (Gateway, ACL)
-│       │        └── test_heuristics/         # Unit and E2E test package for SOLID verifier heuristics
+│       │   ├── llm/                          # Unit and E2E tests for LLM integration (Gateway, ACL)
+│       │   │    └── test_heuristics/         # Unit and E2E test package for SOLID verifier heuristics
+│       │   └── test_cohesion_adapter/        # Tests for the LCOM4 adapter: graph computation, ancestor enrichment, classifier
 │       ├── solid_dashboard/                  # Main Python package of the tool
 │       │   ├── __main__.py                   # CLI entry point
 │       │   ├── config.py                     # Parsing and validation of solid_config.json
 │       │   ├── pipeline.py                   # Central orchestrator for static and LLM analysis
 │       │   ├── schema.py                     # Data schemas for reports
+│       │   ├── py.typed                      # PEP 561 marker: package ships inline types for static analysers
 │       │   ├── interfaces/                   # Python Abstract Base Classes / Protocols
 │       │   │   └── analyzer.py               # Base IAnalyzer interface
 │       │   ├── adapters/                     # Static analysis adapters
 │       │   │   ├── radon_adapter.py          # radon + lizard (parameters, nesting depth)
 │       │   │   ├── cohesion_adapter.py       # custom LCOM4 (ignores @property, strict AST traversal)
+│       │   │   ├── class_classifier.py       # class role classification (concrete/abstract/interface/dataclass)
 │       │   │   ├── import_graph_adapter.py   # import graph (grimp) + stability metrics
 │       │   │   ├── import_linter_adapter.py  # CLI lint-imports + dynamic contract generation
 │       │   │   ├── pyan3_adapter.py          # call graph & dead code (safe, project-agnostic)
@@ -420,7 +423,7 @@ All dependencies are pinned in `requirements.txt` to stable versions compatible 
 - **Short-term tasks**
 
   - Bring the LLM layer to production-ready: stabilize prompts and the JSON response schema, reduce `parse_failures` to zero on typical projects while preserving strict ACL guarantees (no model error should ever break the static report).
-  - Fine-tune handling of infrastructural classes (`Postgres*Repository`, `ScopusHTTPClient`): choose between “LLM-only” analysis and full filtering via an enhanced `ClassRole` (`INFRA_SERVICE` / `INFRA_CLIENT`) so that OCP/LSP checks stay maximally focused on domain layers.
+  - Fine-tune handling of infrastructural classes (`Postgres*Repository`, `ScopusHTTPClient`): choose between "LLM-only" analysis and full filtering via an enhanced `ClassRole` (`INFRA_SERVICE` / `INFRA_CLIENT`) so that OCP/LSP checks stay maximally focused on domain layers.
   - Evolve the visual HTML dashboard (`generator.py`, `differ.py`) with explicit attribution of contributions from the static layer, heuristics and LLM for each finding.
 
 - **Mid-term tasks**
@@ -428,7 +431,8 @@ All dependencies are pinned in `requirements.txt` to stable versions compatible 
   - Extract SOLID Verifier into a standalone package (`pip install solid-verifier`) while preserving the current adapter and LLM architecture.
   - Integrate with IDEs / VS Code for interactive browsing of LSP/OCP candidates and contextual LLM recommendations directly in the editor.
   - Switch to `pyan3 --dot` adapter instead of `--text` to eliminate ~100% of name collisions at the tool level.
+  - Extend `cohesion_adapter` to correctly account for attributes declared via `__slots__`, `dataclasses.field()`, and Pydantic validators — enabling accurate classification of such classes and eliminating false LCOM4 violations.
 
 - **Long-term tasks**
 
-  - Use the LLM not only for OCP/LSP, but also as a “mentoring layer” on top of SRP/DIP metrics: interpret high LCOM4, broken import contracts and highly complex functions as human-readable refactoring advice, **without** giving the model control over the report itself.
+  - Use the LLM not only for OCP/LSP, but also as a "mentoring layer" on top of SRP/DIP metrics: interpret high LCOM4, broken import contracts and highly complex functions as human-readable refactoring advice, **without** giving the model control over the report itself.
