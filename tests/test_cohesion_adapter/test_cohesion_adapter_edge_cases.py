@@ -4,7 +4,7 @@
 # и проверяет конкретное свойство выходного словаря.
 #
 # Группы:
-#   TestLcom4GraphEdgeCases    — граничные случаи графа LCOM4 (Блок A)
+#   TestLcom4GraphEdgeCases     — граничные случаи графа LCOM4 (Блок A)
 #   TestClassKindClassification — классификация class_kind (Блок B)
 #   TestNestedClasses           — вложенные классы (Блок C)
 # ---------------------------------------------------------------------------
@@ -34,6 +34,20 @@ def _class_by_name(result: dict, name: str) -> dict:
     matches = [c for c in result["classes"] if c["name"] == name]
     assert matches, f"Класс '{name}' не найден в result['classes']"
     return matches[0]
+
+
+def _classify(source: str, class_name: str) -> str:
+    """Парсит source, находит ClassDef по имени, возвращает kind через _classify_class.
+
+    Используется для классов, все методы которых тривиальны (is_empty=True):
+    такие классы имеют methods_count=0 и не попадают в result['classes'] через run(),
+    поэтому их class_kind нельзя проверить интеграционно — только через прямой вызов.
+    """
+    tree = ast.parse(textwrap.dedent(source))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return CohesionAdapter()._classify_class(node)
+    raise AssertionError(f"ClassDef '{class_name}' не найден в AST")
 
 
 # ===========================================================================
@@ -229,9 +243,11 @@ class TestClassKindClassification:
         assert cls["class_kind"] == "dataclass"
         assert cls["excluded_from_aggregation"] is True
 
-    def test_protocol_all_abstract_yields_kind_interface(self, tmp_path):
-        # class Foo(Protocol) только с абстрактными методами → "interface"
-        result = _run(tmp_path, """
+    def test_protocol_all_abstract_yields_kind_interface(self):
+        # Protocol только с @abstractmethod-методами → "interface"
+        # Все методы имеют тело `...` (is_empty=True) → methods_count=0 →
+        # класс не попадает в result['classes'] через run(); проверяем _classify_class напрямую
+        kind = _classify("""
             from typing import Protocol
             from abc import abstractmethod
 
@@ -241,10 +257,8 @@ class TestClassKindClassification:
 
                 @abstractmethod
                 def close(self) -> None: ...
-        """)
-        cls = _class_by_name(result, "IReader")
-        assert cls["class_kind"] == "interface"
-        assert cls["excluded_from_aggregation"] is True
+        """, "IReader")
+        assert kind == "interface"
 
     def test_protocol_with_concrete_method_yields_kind_abstract(self, tmp_path):
         # Protocol с одним конкретным методом → "abstract", не "interface"
@@ -302,9 +316,11 @@ class TestClassKindClassification:
         )
         assert cls["excluded_from_aggregation"] is False
 
-    def test_abc_subclass_all_abstract_yields_interface(self, tmp_path):
+    def test_abc_subclass_all_abstract_yields_interface(self):
         # ABC со всеми абстрактными non-dunder методами → "interface"
-        result = _run(tmp_path, """
+        # Все методы имеют тело `...` (is_empty=True) → methods_count=0 →
+        # класс не попадает в result['classes'] через run(); проверяем _classify_class напрямую
+        kind = _classify("""
             from abc import ABC, abstractmethod
 
             class IRepository(ABC):
@@ -313,9 +329,8 @@ class TestClassKindClassification:
 
                 @abstractmethod
                 def save(self, entity): ...
-        """)
-        cls = _class_by_name(result, "IRepository")
-        assert cls["class_kind"] == "interface"
+        """, "IRepository")
+        assert kind == "interface"
 
     def test_abc_subclass_mixed_methods_yields_abstract(self, tmp_path):
         # ABC с одним конкретным методом → "abstract"
