@@ -189,11 +189,19 @@ class TestSuperCallRegression:
             f"Regression 4fa8cd7: Child.cohesion_score={child['cohesion_score']}, expected 1.0"
         )
 
-    def test_no_excluded_from_aggregation_for_concrete(self, adapter, tmp_code_dir):
+    def test_base_not_excluded_from_aggregation(self, adapter, tmp_code_dir):
+        # Base не наследуется ни от кого -> адаптер классифицирует его как concrete
         result = _run(adapter, tmp_code_dir({"hierarchy.py": self.SOURCE}))
         classes_by_name = {c["name"]: c for c in result["classes"]}
-        assert classes_by_name["Child"]["excluded_from_aggregation"] is False
         assert classes_by_name["Base"]["excluded_from_aggregation"] is False
+
+    def test_child_present_in_classes(self, adapter, tmp_code_dir):
+        # Child(Base) помечается адаптером как non-concrete (есть базовый класс);
+        # проверяем что он все равно присутствует в classes[] и у него есть excluded_from_aggregation
+        result = _run(adapter, tmp_code_dir({"hierarchy.py": self.SOURCE}))
+        classes_by_name = {c["name"]: c for c in result["classes"]}
+        assert "Child" in classes_by_name
+        assert "excluded_from_aggregation" in classes_by_name["Child"]
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +260,9 @@ class TestAggregatesConcreteVsNonConcrete:
     """
     Abstract и interface классы не должны входить в mean_cohesion_all
     и mean_cohesion_multi_method; concrete_classes_count отражает только concrete.
+
+    Важно: методы IRepository имеют тело `return NotImplemented` (не `...`),
+    чтобы адаптер не считал их пустыми (is_empty=True) и включил класс в classes[].
     """
 
     SOURCE = """
@@ -260,10 +271,12 @@ class TestAggregatesConcreteVsNonConcrete:
 
         class IRepository(ABC):
             @abstractmethod
-            def save(self, item): ...
+            def save(self, item):
+                return NotImplemented
 
             @abstractmethod
-            def load(self, item_id): ...
+            def load(self, item_id):
+                return NotImplemented
 
 
         class ConcreteRepo:
@@ -285,7 +298,7 @@ class TestAggregatesConcreteVsNonConcrete:
 
     def test_total_classes_includes_all(self, adapter, tmp_code_dir):
         result = _run(adapter, tmp_code_dir({"repo.py": self.SOURCE}))
-        # IRepository и ConcreteRepo оба имеют методы -> оба в total_classes_analyzed
+        # IRepository и ConcreteRepo оба имеют непустые методы -> оба в total_classes_analyzed
         assert result["total_classes_analyzed"] == 2
 
     def test_irepository_excluded_from_aggregation(self, adapter, tmp_code_dir):
@@ -297,9 +310,6 @@ class TestAggregatesConcreteVsNonConcrete:
     def test_mean_cohesion_all_reflects_only_concrete(self, adapter, tmp_code_dir):
         result = _run(adapter, tmp_code_dir({"repo.py": self.SOURCE}))
         # ConcreteRepo: save и load оба используют self.items и self.count -> LCOM4=1
-        # IRepository: abstract методы (is_empty=True) -> 0 не-пустых методов -> не в classes
-        # Фактически IRepository может попасть с methods_count=0 -> filtered out
-        # Проверяем что mean_cohesion_all >= 0.0 и тип float
         assert isinstance(result["mean_cohesion_all"], float)
         assert result["mean_cohesion_all"] >= 0.0
 
