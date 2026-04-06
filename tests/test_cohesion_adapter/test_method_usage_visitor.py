@@ -22,7 +22,7 @@ import pytest
 
 # _MethodUsageVisitor — приватный класс модуля, импортируем напрямую
 # (не часть публичного API адаптера, но необходим для регрессионных тестов)
-from solid_dashboard.adapters.cohesion_adapter import _MethodUsageVisitor
+from solid_dashboard.adapters.cohesion_adapter import _MethodUsageVisitor  # type: ignore[reportPrivateImportUsage]
 
 
 def _make_visitor(
@@ -45,10 +45,10 @@ def _make_visitor(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     )
     visitor = _MethodUsageVisitor(
-        class_attributes=class_attributes,
-        method_names=method_names,
-        is_static=is_static,
-    )
+    class_attributes=class_attributes,
+    method_names=method_names,
+    is_static=is_static,
+)
     visitor.visit(func_node)
     return visitor
 
