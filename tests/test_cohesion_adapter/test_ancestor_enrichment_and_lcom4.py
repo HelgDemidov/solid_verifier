@@ -13,9 +13,11 @@ import textwrap
 from pathlib import Path
 from typing import cast, Dict, List, Tuple
 
-import pytest
+from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
 
-from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter, ClassInfo
+# ClassInfo импортируется из conftest — единственное место с type: ignore;
+# прямой импорт из адаптера здесь не нужен
+from .conftest import ClassInfo
 
 
 # ---------------------------------------------------------------------------
@@ -23,6 +25,7 @@ from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter, ClassInfo
 # ---------------------------------------------------------------------------
 
 def _make_adapter() -> CohesionAdapter:
+    # cast нужен: Pylance видит CohesionAdapter через IAnalyzer-линзу без приватных методов
     return cast(CohesionAdapter, CohesionAdapter())
 
 

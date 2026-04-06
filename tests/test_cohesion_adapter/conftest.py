@@ -3,7 +3,10 @@ import textwrap
 import pytest
 from pathlib import Path
 from typing import cast
-from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
+from solid_dashboard.adapters.cohesion_adapter import (
+    CohesionAdapter,
+    ClassInfo,  # type: ignore[reportPrivateImportUsage]
+)
 
 
 # парсим фрагмент кода и возвращаем первый ClassDef — удобно для unit-тестов
@@ -27,8 +30,14 @@ def tmp_code_dir(tmp_path: Path):
         return tmp_path
     return _inner
 
+
 @pytest.fixture
 def adapter() -> CohesionAdapter:
     # cast нужен: CohesionAdapter реализует IAnalyzer (Protocol),
     # Pylance не видит приватные методы через Protocol-линзу без явного приведения
     return cast(CohesionAdapter, CohesionAdapter())
+
+
+# ClassInfo реэкспортируется из conftest, чтобы тестовые файлы
+# импортировали его отсюда — единственное место с type: ignore
+__all__ = ["ClassInfo"]
