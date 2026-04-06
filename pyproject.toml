@@ -27,7 +27,7 @@ dependencies = [
     "Jinja2>=3.1.0,<4.0.0",
 
     # Block 4 - HTTP client & environment loading
-    "httpx>=0.24.0,<1.0.0",
+    "httpx>=0.27.0,<2.0.0",
     "python-dotenv>=1.0.0,<2.0.0",
 ]
 
@@ -52,3 +52,7 @@ include-package-data = true
 where = ["."]
 include = ["solid_dashboard", "solid_dashboard.*"]
 exclude = ["tests", "tests.*"]
+
+# явно включаем py.typed маркер в сборку пакета — нужен для Pylance/Pyright (PEP 561)
+[tool.setuptools.package-data]
+"solid_dashboard" = ["py.typed"]

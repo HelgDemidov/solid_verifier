@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter, ClassInfo
+
 from solid_dashboard.adapters.class_classifier import classify_class
 
 # ClassInfo и classify_class реэкспортируются отсюда как единственная точка импорта —

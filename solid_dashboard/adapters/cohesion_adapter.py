@@ -24,6 +24,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from solid_dashboard.interfaces.analyzer import IAnalyzer
 from solid_dashboard.adapters.class_classifier import classify_class
 
+
+# явно объявляем публичный API модуля — Pylance и другие линтеры увидят оба символа
+__all__ = ["CohesionAdapter", "ClassInfo", "MethodInfo"]
+
+
 # именованный логгер модуля — используется во всех методах адаптера
 logger = logging.getLogger(__name__)
 

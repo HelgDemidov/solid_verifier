@@ -13,6 +13,8 @@
 import ast
 from typing import Set
 
+# явно объявляем публичный API модуля 
+__all__ = ["classify_class"]
 
 def classify_class(class_node: ast.ClassDef) -> str:
     """
