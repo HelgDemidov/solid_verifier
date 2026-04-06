@@ -52,20 +52,3 @@ include-package-data = true
 where = ["."]
 include = ["solid_dashboard", "solid_dashboard.*"]
 exclude = ["tests", "tests.*"]
-
-# ---------------------------------------------------------------------------
-# Pyright / Pylance — базовые настройки
-# ---------------------------------------------------------------------------
-[tool.pyright]
-# Строгий режим для production-кода; тесты переопределяют ниже
-typeCheckingMode = "basic"
-
-# ---------------------------------------------------------------------------
-# Переопределение правил для тестовой директории:
-# тесты намеренно обращаются к приватным методам адаптеров через AST-интроспекцию,
-# поэтому reportAttributeAccessIssue и reportPrivateImportUsage здесь неприменимы
-# ---------------------------------------------------------------------------
-[[tool.pyright.overrides]]
-include = ["tests/**"]
-reportAttributeAccessIssue = "none"
-reportPrivateImportUsage = "none"

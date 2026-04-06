@@ -17,7 +17,7 @@ from solid_dashboard.adapters.cohesion_adapter import CohesionAdapter
 
 # ClassInfo импортируется из conftest — единственное место с type: ignore;
 # прямой импорт из адаптера здесь не нужен
-from .conftest import ClassInfo
+from .conftest import ClassInfo # pyright: ignore[reportAttributeAccessIssue]
 
 
 # ---------------------------------------------------------------------------
@@ -38,9 +38,9 @@ def _parse_classes(source: str) -> Dict[str, Tuple[ClassInfo, ast.ClassDef]]:
     raw: Dict[str, Tuple[ClassInfo, ast.ClassDef]] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
-            ci = adapter._build_class_info(node, Path(filepath))
-            adapter._collect_instance_attributes_from_init(ci, node)
-            adapter._populate_method_usage(ci, node)
+            ci = adapter._build_class_info(node, Path(filepath)) # pyright: ignore[reportAttributeAccessIssue]
+            adapter._collect_instance_attributes_from_init(ci, node) # pyright: ignore[reportAttributeAccessIssue]
+            adapter._populate_method_usage(ci, node) # pyright: ignore[reportAttributeAccessIssue]
             raw[node.name] = (ci, node)
 
     return raw
@@ -89,7 +89,7 @@ class TestEnrichWithAncestorAttributes:
         assert "z" in child_ci.attributes
         assert "x" not in child_ci.attributes
 
-        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         # после обогащения — атрибуты предка тоже присутствуют
         assert "x" in child_ci.attributes
@@ -118,7 +118,7 @@ class TestEnrichWithAncestorAttributes:
         index = _build_index(classes)
 
         gc_ci, gc_node = classes["GrandChild"]
-        adapter._enrich_with_ancestor_attributes(gc_ci, gc_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(gc_ci, gc_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         # все три уровня должны быть в атрибутах GrandChild
         assert {"a", "b", "c"} <= gc_ci.attributes
@@ -150,7 +150,7 @@ class TestEnrichWithAncestorAttributes:
 
         d_ci, d_node = classes["Diamond"]
         # обогащение не должно зависнуть и не должно сломаться
-        adapter._enrich_with_ancestor_attributes(d_ci, d_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(d_ci, d_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         # все атрибуты присутствуют (дубликаты Set поглощает сам)
         assert {"shared", "left", "right", "own"} <= d_ci.attributes
@@ -170,7 +170,7 @@ class TestEnrichWithAncestorAttributes:
 
         child_ci, child_node = classes["Child"]
         # не должно бросить исключение
-        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         assert "own" in child_ci.attributes
 
@@ -193,7 +193,7 @@ class TestEnrichWithAncestorAttributes:
         index = _build_index(classes)
 
         child_ci, child_node = classes["Child"]
-        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         # атрибут value должен присутствовать (Set идемпотентен — add не перетирает)
         assert "value" in child_ci.attributes
@@ -217,7 +217,7 @@ class TestEnrichWithAncestorAttributes:
         index = _build_index(classes)
 
         child_ci, child_node = classes["Child"]
-        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py")
+        adapter._enrich_with_ancestor_attributes(child_ci, child_node, index, "/fake/module.py") # pyright: ignore[reportAttributeAccessIssue]
 
         # только собственный атрибут; нет падений
         assert child_ci.attributes == {"result"}
@@ -236,7 +236,7 @@ class TestComputeLcom4:
         adapter = _make_adapter()
         classes = _parse_classes(source)
         ci, _ = classes[class_name]
-        return adapter._compute_lcom4(ci)
+        return adapter._compute_lcom4(ci) # pyright: ignore[reportAttributeAccessIssue]
 
     # -----------------------------------------------------------------------
     # F1: класс без методов — (0, 0)
