@@ -464,6 +464,7 @@
     "mean_cohesion_multi_method": 1.0,
     "analyzed_classes_count": 3,
     "low_cohesion_count": 0,
+    "low_cohesion_excluded_count": 1,
     "low_cohesion_threshold": 1,
     "classes": [
       {

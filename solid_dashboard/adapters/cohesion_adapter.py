@@ -236,10 +236,18 @@ class CohesionAdapter(IAnalyzer):
                         classdef_index[node.name] = node
 
         # ------------------------------------------------------------------
-        # Pass 2: обогащаем атрибуты каждого класса из __init__ его предков
+        # Pass 2: обогащаем атрибуты каждого класса из __init__ его предков,
+        # затем перезапускаем Visitor для методов, у которых появились новые атрибуты
         # ------------------------------------------------------------------
         for class_info, class_node in raw_items:
+            # фиксируем размер до обогащения — нужен для проверки на расширение
+            attrs_before = len(class_info.attributes)
+
             self._enrich_with_ancestor_attributes(class_info, class_node, classdef_index)
+
+            # перезапускаем Visitor только если атрибуты реально расширились
+            if len(class_info.attributes) > attrs_before:
+                self._repopulate_method_usage(class_info, class_node)
 
         return [ci for ci, _ in raw_items]
 
@@ -643,6 +651,45 @@ class CohesionAdapter(IAnalyzer):
             )
             visitor.visit(node)
 
+            method_info.used_attributes = visitor.used_attributes
+            method_info.called_methods = visitor.called_methods
+
+    def _repopulate_method_usage(self, class_info: ClassInfo, class_node: ast.ClassDef) -> None:
+        """
+        Повторный проход _MethodUsageVisitor после Pass 2 (обогащения атрибутами предков).
+
+        На Pass 1 _populate_method_usage уже запустился, но class_info.attributes тогда
+        содержал только атрибуты самого класса — унаследованные self.xxx ещё не были добавлены.
+        После _enrich_with_ancestor_attributes атрибуты предков попали в class_info.attributes,
+        поэтому нужно перезапустить Visitor, чтобы used_attributes методов дочернего класса
+        включили унаследованные поля как реальные связи в графе LCOM4.
+
+        Вызывается из _collect_classes в конце Pass 2 — только для классов,
+        у которых атрибуты действительно расширились (attrs_before != attrs_after).
+        """
+        methods_by_name: Dict[str, MethodInfo] = {m.name: m for m in class_info.methods}
+        method_names: Set[str] = set(methods_by_name.keys())
+
+        for node in class_node.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+
+            method_name = node.name
+            method_info = methods_by_name.get(method_name)
+            if method_info is None:
+                continue
+
+            # флаг: является ли текущий метод @staticmethod
+            is_static = "staticmethod" in method_info.decorator_kinds
+
+            visitor = _MethodUsageVisitor(
+                class_attributes=class_info.attributes,
+                method_names=method_names,
+                is_static=is_static,
+            )
+            visitor.visit(node)
+
+            # перезаписываем used_attributes и called_methods обновлёнными значениями
             method_info.used_attributes = visitor.used_attributes
             method_info.called_methods = visitor.called_methods
 
