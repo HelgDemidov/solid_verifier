@@ -680,6 +680,7 @@
         "target": "models"
       }
     ],
+    "violations": [],
     "debug_info": {
       "package": "app",
       "total_modules": 44,
