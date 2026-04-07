@@ -731,7 +731,7 @@
         "dep_instability": 0.0,
         "severity": "error",
         "message": "infrastructure (I=0.6) depends on db_libs (I=0.0), but db_libs is less stable than infrastructure (violation margin: 0.6, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -741,7 +741,7 @@
         "dep_instability": 0.33,
         "severity": "error",
         "message": "infrastructure (I=0.6) depends on interfaces (I=0.33), but interfaces is less stable than infrastructure (violation margin: 0.27, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -751,7 +751,7 @@
         "dep_instability": 0.2,
         "severity": "error",
         "message": "infrastructure (I=0.6) depends on models (I=0.2), but models is less stable than infrastructure (violation margin: 0.4, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -761,7 +761,7 @@
         "dep_instability": 0.2,
         "severity": "error",
         "message": "interfaces (I=0.33) depends on models (I=0.2), but models is less stable than interfaces (violation margin: 0.13, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -771,7 +771,7 @@
         "dep_instability": 0.0,
         "severity": "error",
         "message": "routers (I=1.0) depends on db_libs (I=0.0), but db_libs is less stable than routers (violation margin: 1.0, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -781,7 +781,7 @@
         "dep_instability": 0.6,
         "severity": "error",
         "message": "routers (I=1.0) depends on infrastructure (I=0.6), but infrastructure is less stable than routers (violation margin: 0.4, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -791,7 +791,7 @@
         "dep_instability": 0.2,
         "severity": "error",
         "message": "routers (I=1.0) depends on models (I=0.2), but models is less stable than routers (violation margin: 0.8, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -801,7 +801,7 @@
         "dep_instability": 0.8,
         "severity": "error",
         "message": "routers (I=1.0) depends on services (I=0.8), but services is less stable than routers (violation margin: 0.2, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -811,7 +811,7 @@
         "dep_instability": 0.0,
         "severity": "error",
         "message": "routers (I=1.0) depends on web_libs (I=0.0), but web_libs is less stable than routers (violation margin: 1.0, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -821,7 +821,7 @@
         "dep_instability": 0.33,
         "severity": "error",
         "message": "services (I=0.8) depends on interfaces (I=0.33), but interfaces is less stable than services (violation margin: 0.47, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SDP-001",
@@ -831,7 +831,7 @@
         "dep_instability": 0.2,
         "severity": "error",
         "message": "services (I=0.8) depends on models (I=0.2), but models is less stable than services (violation margin: 0.6, tolerance: 0.1)",
-        "evidence": null
+        "evidence": []
       },
       {
         "rule": "SLP-001",
@@ -854,7 +854,7 @@
         "dependency": "models",
         "dep_tier": 4,
         "skip_distance": 1,
-        "severity": "warning",
+        "severity": "error",
         "message": "infrastructure (tier=2) depends directly on models (tier=4), skipping 1 tier(s): ['interfaces']",
         "evidence": [
           3
