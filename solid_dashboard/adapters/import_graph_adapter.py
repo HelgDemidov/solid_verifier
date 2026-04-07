@@ -13,12 +13,14 @@
 # 5. Разрешение tier-мапа из solid_config.json для SDP/SAP-проверок (коммит 4+).
 # 6. Поддержка utility_layers (core, schemas) — crosscutting-слои в графе без SDP-проверки (коммит 4.6).
 # 7. SDP violation detector: выявление нарушений Stable Dependencies Principle (коммит 5).
+# 8. Skip-layer violation detector: выявление прямых зависимостей через несколько тиров (коммит 6).
 # ===================================================================================================
 
 
+import collections
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 from solid_dashboard.interfaces.analyzer import IAnalyzer
 import grimp
 
@@ -30,7 +32,7 @@ class ImportGraphAdapter(IAnalyzer):
     Использует тот же движок, что и import-linter. Это снижает риск
     расхождения между визуальным графом и контрактной проверкой.
 
-    Схема словаря нарушения (violation) в поле ``violations``:
+    Схема словаря нарушения SDP (rule="SDP-001") в поле ``violations``:
 
     .. code-block:: python
 
@@ -42,7 +44,23 @@ class ImportGraphAdapter(IAnalyzer):
             "dep_instability": float,  # I(target)
             "severity": str,           # "error"
             "message": str,            # человекочитаемое описание
-            "evidence": None,          # reserved for коммит 6+
+            "evidence": None,          # reserved
+        }
+
+    Схема словаря нарушения Skip-Layer (rule="SLP-001") в поле ``violations``:
+
+    .. code-block:: python
+
+        {
+            "rule": str,               # "SLP-001"
+            "layer": str,              # слой-источник нарушения
+            "tier": int,               # tier(source)
+            "dependency": str,         # слой-цель (target)
+            "dep_tier": int,           # tier(target)
+            "skip_distance": int,      # количество пропущенных тиров
+            "severity": str,           # "error" | "warning"
+            "message": str,            # человекочитаемое описание
+            "evidence": list,          # список пропущенных tier-индексов
         }
 
     SDP (Stable Dependencies Principle): слой должен зависеть только от слоев,
@@ -57,10 +75,17 @@ class ImportGraphAdapter(IAnalyzer):
         models   (I=0.2) → db_libs  (I=0.0): 0.2 <= 0.0 + 0.10? → False → violation
             (но models→db_libs есть в allowed_dependency_exceptions → пропускается)
 
+    SLP (Skip-Layer Principle): слой не должен зависеть напрямую от слоев,
+    отстоящих более чем на 1 тир вниз по иерархии.
+    Пример-якорь:
+        routers (tier=0) → models (tier=4): skip_distance=3 → error
+        routers (tier=0) → infrastructure (tier=2): skip_distance=1 → warning
+        services (tier=1) → interfaces (tier=3): skip_distance=1, interfaces в interface_layers → warning
+
     Семантика utility_layers (crosscutting-слои):
     - ``utility_layers`` (core, schemas) участвуют в графе и метриках Ca/Ce/I.
-    - Они НЕ входят в ``layer_order`` → tier=None → SDP-детектор их пропускает (fail-silent).
-    - Это позволяет видеть реальные зависимости без ложных SDP-нарушений.
+    - Они НЕ входят в ``layer_order`` → tier=None → оба детектора их пропускают (fail-silent).
+    - Это позволяет видеть реальные зависимости без ложных нарушений.
     """
 
     @property
@@ -84,7 +109,7 @@ class ImportGraphAdapter(IAnalyzer):
             }
 
         # Читаем utility_layers — crosscutting-слои (core, schemas и т.п.)
-        # Участвуют в графе и метриках, но не входят в layer_order (нет SDP-проверки)
+        # Участвуют в графе и метриках, но не входят в layer_order (нет SDP/SLP-проверки)
         utility_layer_config: Dict[str, List[str]] = config.get("utility_layers", {})
         external_layer_config: Dict[str, List[str]] = config.get("external_layers", {})
 
@@ -128,7 +153,7 @@ class ImportGraphAdapter(IAnalyzer):
                 node["id"]: node["instability"] for node in nodes
             }
 
-            # Строим tier_map: utility_layers не получают tier → fail-silent в детекторе
+            # Строим tier_map: utility_layers не получают tier → fail-silent в обоих детекторах
             tier_map = self._resolve_tier_map(config)
 
             # Читаем tolerance: дефолт 0.0 (строгая проверка)
@@ -137,7 +162,7 @@ class ImportGraphAdapter(IAnalyzer):
             # Читаем allowed_dependency_exceptions: дефолт [] (без исключений)
             exceptions: List[Dict[str, Any]] = config.get("allowed_dependency_exceptions") or []
 
-            # Восстанавливаем layer_edges из edges для детектора
+            # Восстанавливаем layer_edges из edges — используется обоими детекторами
             layer_edges_set: Set[Tuple[str, str]] = {
                 (e["source"], e["target"]) for e in edges
             }
@@ -150,6 +175,23 @@ class ImportGraphAdapter(IAnalyzer):
                 exceptions=exceptions,
             )
             # --- конец Блока 6 ----------------------------------------------
+
+            # --- Блок 7: Skip-layer violation detection ---------------------
+            # Выполняется строго после Блока 6: tier_map и layer_edges_set уже готовы
+            # _get_interface_layer_names использует тот же config (коммит 4)
+
+            interface_layer_names: List[str] = self._get_interface_layer_names(config)
+
+            skip_violations = self._detect_skip_layer_violations(
+                layer_edges=layer_edges_set,
+                tier_map=tier_map,
+                interface_layer_names=interface_layer_names,
+            )
+
+            # Объединяем: SDP-нарушения идут первыми (severity=error, более критичны),
+            # skip-layer нарушения добавляются следом
+            violations = violations + skip_violations
+            # --- конец Блока 7 ----------------------------------------------
 
             return {
                 "nodes": nodes,
@@ -164,6 +206,9 @@ class ImportGraphAdapter(IAnalyzer):
                     "external_layer_prefixes_used": external_layer_config,
                     "sdp_tolerance_used": tolerance,
                     "sdp_exceptions_count": len(exceptions),
+                    # поля коммита 6: счетчик и список interface_layers для трассировки
+                    "skip_layer_violations_count": len(skip_violations),
+                    "interface_layers_used": interface_layer_names,
                 },
             }
         except Exception as exc:
@@ -177,6 +222,121 @@ class ImportGraphAdapter(IAnalyzer):
             # Безопасное удаление из sys.path
             if added_to_path and parent_dir in sys.path:
                 sys.path.remove(parent_dir)
+
+    # ------------------------------------------------------------------
+    # Skip-layer violation detector (коммит 6)
+    # ------------------------------------------------------------------
+
+    def _detect_skip_layer_violations(
+        self,
+        layer_edges: Set[Tuple[str, str]],
+        tier_map: Optional[Dict[str, int]],
+        interface_layer_names: List[str],
+    ) -> List[Dict[str, Any]]:
+        """
+        Выявляет нарушения Skip-Layer Principle (SLP) по рёбрам графа.
+
+        Слой нарушает SLP если он зависит напрямую от слоя, минуя один или
+        несколько промежуточных тиров иерархии. Каждый тир должен
+        взаимодействовать с соседними, а не с произвольно удалёнными.
+
+        Условие нарушения для ребра source→target:
+
+            skip_distance = tier(target) - tier(source) - 1 >= 1
+
+        Пример-якорь:
+
+        .. code-block:: text
+
+            routers (tier=0) → models (tier=4): skip_distance=3 → error
+            routers (tier=0) → infrastructure (tier=2): skip_distance=1 → warning
+            services (tier=1) → interfaces (tier=3): skip_distance=1,
+                interfaces в interface_layers → warning (ISP-aware downgrade)
+            infrastructure (tier=2) → db_libs (tier=5): skip_distance=2 → error
+
+        Severity-логика:
+        - skip_distance >= 2 → ``error``   (прыжок через 2+ тира, явная архитектурная проблема)
+        - skip_distance == 1 → ``warning`` (прыжок через 1 тир, допустимо при явном обосновании)
+        - ISP-aware downgrade: если target входит в ``interface_layers`` →
+          severity понижается до ``warning`` независимо от skip_distance,
+          так как прямые зависимости от интерфейсных слоев архитектурно допустимы
+
+        Evidence поле: список пропущенных tier-индексов (не None),
+        позволяет быстро найти какие промежуточные слои были обойдены.
+
+        Слои пропускаются (fail-silent) если:
+        - source или target отсутствуют в tier_map (utility_layers, неизвестные слои)
+        - tier_map равен None (нет layer_order в конфиге)
+        - skip_distance < 1 (соседние тиры, нарушения нет)
+
+        :param layer_edges: множество рёбер графа (source, target)
+        :param tier_map: {layer_name: tier_index} или None
+        :param interface_layer_names: список слоев-интерфейсов для ISP-aware downgrade
+        :returns: список violation-словарей с rule="SLP-001"
+        """
+        violations: List[Dict[str, Any]] = []
+
+        # Если tier_map не построен (нет layer_order) — нечего проверять
+        if not tier_map:
+            return violations
+
+        # Инверсия tier_map → tier_to_layers для evidence: какие слои в каждом тире
+        tier_to_layers: DefaultDict[int, List[str]] = collections.defaultdict(list)
+        for layer_name, tier_index in tier_map.items():
+            tier_to_layers[tier_index].append(layer_name)
+
+        # Быстрый lookup для ISP-aware downgrade
+        interface_set: Set[str] = set(interface_layer_names)
+
+        for source, target in sorted(layer_edges):
+            # Пропускаем слои без tier (utility_layers, неизвестные) — fail-silent
+            if source not in tier_map or target not in tier_map:
+                continue
+
+            t_source = tier_map[source]
+            t_target = tier_map[target]
+
+            # skip_distance: сколько тиров пропущено между source и target
+            # Пример: source=tier0, target=tier2 → skip_distance=1 (пропущен tier1)
+            skip_distance = t_target - t_source - 1
+
+            # Нет пропуска: соседние тиры или обратное ребро → не нарушение
+            if skip_distance < 1:
+                continue
+
+            # ISP-aware downgrade: интерфейсные слои допускают прямые зависимости
+            # (слой может напрямую зависеть от абстракций без проксирования через соседей)
+            if target in interface_set:
+                severity = "warning"
+            elif skip_distance >= 2:
+                # Прыжок через 2+ тира — явная архитектурная проблема
+                severity = "error"
+            else:
+                # Прыжок через 1 тир — предупреждение
+                severity = "warning"
+
+            # Evidence: конкретные тиры, которые были обойдены
+            skipped_tier_indices = list(range(t_source + 1, t_target))
+            skipped_layer_names: List[str] = []
+            for skipped_tier in skipped_tier_indices:
+                skipped_layer_names.extend(tier_to_layers.get(skipped_tier, []))
+
+            violations.append({
+                "rule": "SLP-001",
+                "layer": source,
+                "tier": t_source,
+                "dependency": target,
+                "dep_tier": t_target,
+                "skip_distance": skip_distance,
+                "severity": severity,
+                "message": (
+                    f"{source} (tier={t_source}) depends directly on {target} (tier={t_target}), "
+                    f"skipping {skip_distance} tier(s): {skipped_layer_names}"
+                ),
+                "evidence": skipped_tier_indices,
+            })
+
+        return violations
 
     # ------------------------------------------------------------------
     # SDP violation detector (коммит 5)
@@ -215,7 +375,7 @@ class ImportGraphAdapter(IAnalyzer):
         - tier_map равен None (нет layer_order в конфиге)
 
         Исключения из ``allowed_dependency_exceptions`` фильтруются по
-        {"source": str, "target": str} до применения SDP-проверки.
+        {\"source\": str, \"target\": str} до применения SDP-проверки.
 
         :param layer_edges: множество рёбер графа (source, target)
         :param instability_map: {layer_name: instability_value}
@@ -264,7 +424,7 @@ class ImportGraphAdapter(IAnalyzer):
                         f"but {target} is less stable than {source} "
                         f"(violation margin: {round(i_source - i_target, 2)}, tolerance: {tolerance})"
                     ),
-                    "evidence": None,  # reserved for коммит 6+
+                    "evidence": None,  # reserved
                 })
 
         return violations
@@ -307,7 +467,7 @@ class ImportGraphAdapter(IAnalyzer):
         (самые стабильные зависимости, на них все опираются внутренние слои).
 
         ``utility_layers`` намеренно не присваиваются в tier_map —
-        они crosscutting и не участвуют в SDP-проверках.
+        они crosscutting и не участвуют в SDP/SLP-проверках.
 
         Возвращает None если ``layer_order`` отсутствует или пустой (fail-silent).
 
@@ -366,6 +526,7 @@ class ImportGraphAdapter(IAnalyzer):
         Читает поле ``interface_layers`` из ``solid_config.json``.
         Для этих слоев стабильность I -> 0 является ожидаемой,
         и SAP-детектор будет применять повышенный порог предупреждения.
+        В SLP-детекторе эти слои получают ISP-aware downgrade severity до warning.
 
         Возвращает пустой список если поле отсутствует (fail-silent).
 
