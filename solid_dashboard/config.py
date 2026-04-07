@@ -35,6 +35,23 @@ def load_config(path: str | None) -> Dict[str, Any]:
     if "ignore_dirs" not in data or not isinstance(data["ignore_dirs"], list):
         raise ValueError("Config must contain 'ignore_dirs' list")
 
+    # Проверяем согласованность layer_order и ключей layers:
+    # расхождение между ними — тихая бомба замедленного действия (неверный порядок
+    # в layers-контракте import-linter), поэтому превращаем его в явный сбой на старте
+    layer_order = data.get("layer_order")
+    layer_keys = set(data["layers"].keys())
+    if layer_order is not None:
+        if not isinstance(layer_order, list):
+            raise ValueError("Config key 'layer_order' must be a list if present")
+        if set(layer_order) != layer_keys:
+            missing_in_order = layer_keys - set(layer_order)
+            extra_in_order = set(layer_order) - layer_keys
+            raise ValueError(
+                f"'layer_order' и ключи 'layers' не совпадают. "
+                f"Отсутствуют в layer_order: {missing_in_order}. "
+                f"Лишние в layer_order: {extra_in_order}."
+            )
+
     data["__config_path__"] = str(config_path)
 
     return data

@@ -8,8 +8,8 @@
 #    базового файла .importlinter и актуального списка слоев из solid_config.json.
 # 2. Изолированный запуск import-linter CLI в подпроцессе с передачей правильного
 #    контекста (PYTHONPATH), охватывающего директорию анализа.
-# 3. Применение фильтра import_linter_ignore_subpackages (настройка ignore_imports) для
-#    явного исключения субпакетов из архитектурных проверок.
+# 3. Порядок слоев берется из layer_order (единственный источник истины);
+#    dict.keys() секции layers используется только как fallback.
 # 4. Парсинг текстового вывода линтера (ANSI-очистка) для подсчета нарушенных/
 #    соблюденных контрактов и извлечения списка конкретных нарушений.
 # ===================================================================================================
@@ -18,7 +18,7 @@
 import configparser  # стандартный INI-парсер для работы с .importlinter
 import os             # работа с путями и файлами
 import re             # разбор текста и ANSI-кодов
-import subprocess     # запуск lint-imports как отделэного процесса
+import subprocess     # запуск lint-imports как отдельного процесса
 from typing import Any, Dict, List  # типы для аннотаций
 
 from solid_dashboard.interfaces.analyzer import IAnalyzer  # базовый интерфейс адаптера
@@ -31,8 +31,7 @@ class ImportLinterAdapter(IAnalyzer):
     # Синхронизирует базовый конфигурационный файл .importlinter с единой моделью solid_config.json:
     # - Читает существующий базовый файл .importlinter через configparser (нечувствительно к порядку полей)
     # - Динамически перезаписывает параметр root_packages под целевую директорию (package_name)
-    # - Обновляет архитектурный контракт (блок 'layers') актуальными слоями проекта во всех контрактах типа layers
-    # - Исключает субпакеты из import_linter_ignore_subpackages через ignore_imports
+    # - Обновляет архитектурный контракт (блок 'layers') актуальными слоями из layer_order
     # - Сохраняет результат во временный файл (например, .importlinter_auto_app)
     # - Запускает lint-imports --config <temp_file> и безопасно удаляет его после работы
 
@@ -136,16 +135,19 @@ class ImportLinterAdapter(IAnalyzer):
     ) -> None:
         """
         Читает базовый .importlinter через configparser, заменяет root_packages
-        на package_name, обновляет блок layers во всех контрактах типа layers,
-        добавляет ignore_imports из import_linter_ignore_subpackages
+        на package_name, обновляет блок layers во всех контрактах типа layers
         и сохраняет результат в outpath.
 
-        Семантическое разделение полей конфига:
-          ignore_dirs                    — filesystem-фильтр для всех адаптеров
-          import_linter_ignore_subpackages — Python import paths только для этого адаптера
+        Порядок слоев определяется исключительно из layer_order (единственный источник
+        истины). Порядок ключей dict из секции 'layers' JSON-конфига намеренно
+        игнорируется — он зависит от порядка вставки и нестабилен при редактировании.
+        Если layer_order отсутствует, используется dict.keys() как аварийный fallback.
 
-        import_linter_ignore_subpackages опциональное поле: если отсутствует —
-        ignore_imports не генерируется, адаптер работает в штатном режиме.
+        ignore_imports в сгенерированном конфиге не проставляются: utility_layers
+        (core, schemas, demo и т.п.) не участвуют в layers-контракте, поэтому
+        паттерны ignore_imports для них порождали unmatched-предупреждения и
+        приводили к returncode=1 в отдельных версиях import-linter.
+        При необходимости ignore_imports следует вести вручную в базовом .importlinter.
         """
         cfg = configparser.RawConfigParser()
         # Сохраняем регистр ключей — configparser по умолчанию приводит к нижнему
@@ -157,17 +159,16 @@ class ImportLinterAdapter(IAnalyzer):
             # при однострочном значении ('app') import-linter итерирует строку посимвольно
             # и получает ['a','p','p']; multiline-форма гарантирует разбор через splitlines()
             cfg.set("importlinter", "root_packages", f"\n    {package_name}")
-            # unmatched_ignore_imports=warn: страховочный слой против ошибок при
-            # рассинхронизации конфига со структурой пакета (паттерн без совпадений → warn, не error)
+            # unmatched_ignore_imports=warn: страховочный слой на случай будущих
+            # ручных правок базового .importlinter (паттерн без совпадений → warn, не error)
             cfg.set("importlinter", "unmatched_ignore_imports", "warn")
 
-        layer_config: Dict[str, Any] = solid_config.get("layers", {})
-        layer_names = list(layer_config.keys())
-
-        # Ичитываем опциональный список субпакетов для исключения из архитектурных контрактов.
-        # Отдельное поле (ignore_dirs не используется): filesystem и import paths — разные семантики
-        linter_ignore_raw = solid_config.get("import_linter_ignore_subpackages") or []
-        linter_ignore = [d.strip() for d in linter_ignore_raw if d and d.strip()]
+        # layer_order — единственный источник истины для порядка слоев;
+        # dict.keys() из 'layers' используется только как аварийный fallback,
+        # так как порядок ключей JSON-объекта нестабилен при ручном редактировании
+        layer_names: List[str] = solid_config.get("layer_order") or list(
+            solid_config.get("layers", {}).keys()
+        )
 
         # Итерируемся по всем секциям — обрабатываем каждый контракт независимо
         for section in cfg.sections():
@@ -190,15 +191,6 @@ class ImportLinterAdapter(IAnalyzer):
                 f"    {layer}" for layer in layer_names
             )
             cfg.set(section, "layers", layers_value)
-
-            # Генерируем ignore_imports только если пользователь явно указал субпакеты
-            if linter_ignore:
-                ignore_lines = []
-                for d in linter_ignore:
-                    # Исключаем как исходящие, так и входящие импорты исключаемого субпакета
-                    ignore_lines.append(f"    {package_name}.{d}.* -> *")
-                    ignore_lines.append(f"    * -> {package_name}.{d}.*")
-                cfg.set(section, "ignore_imports", "\n" + "\n".join(ignore_lines))
 
         # Записываем итоговый конфиг во временный файл
         with open(outpath, "w", encoding="utf-8") as f:
