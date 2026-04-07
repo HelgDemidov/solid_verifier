@@ -11,6 +11,7 @@
 # 4. Расчет метрик: Ca (Afferent Coupling), Ce (Efferent Coupling), Instability (I)
 #    для каждого слоя, выявление потенциальных нарушений потока управления.
 # 5. Разрешение tier-мапа из solid_config.json для SDP/SAP-проверок (коммит 4+).
+# 6. Поддержка utility_layers (core, schemas) — crosscutting-слои в графе без SDP-проверки (коммит 4.6).
 # ===================================================================================================
 
 
@@ -46,6 +47,14 @@ class ImportGraphAdapter(IAnalyzer):
     Поле ``evidence`` зарезервировано для будущего слоя доказательств:
     конкретных модулей и ребер импорта, подтверждающих нарушение метрики.
     До реализации SDP/SAP-детектора всегда равно None.
+
+    Семантика utility_layers (crosscutting-слои):
+    - ``utility_layers`` (например, core, schemas) участвуют в графе и метриках Ca/Ce/I
+      наравне с обычными ``layers``.
+    - Они НЕ входят в ``layer_order``, поэтому SDP/skip-layer детекторы (коммит 5+)
+      обрабатывают рёбра к ним через fail-silent (tier = None → ребро пропускается).
+    - Это позволяет видеть реальные зависимости на services→core, routers→schemas
+      без ложных SDP-нарушений для crosscutting-слоёв.
     """
 
     @property
@@ -68,8 +77,17 @@ class ImportGraphAdapter(IAnalyzer):
                 "error": "no layer configuration found in solid_config.json",
             }
 
+        # Читаем utility_layers — crosscutting-слои (core, schemas и т.п.)
+        # Участвуют в графе и метриках, но не входят в layer_order (нет SDP-проверки)
+        utility_layer_config: Dict[str, List[str]] = config.get("utility_layers", {})
         external_layer_config: Dict[str, List[str]] = config.get("external_layers", {})
+
         normalized_layers = self._normalize_layer_config(layer_config, package_name)
+        normalized_utility_layers = self._normalize_layer_config(utility_layer_config, package_name)
+
+        # Объединяем внутренние и utility-слои для построения единого графа
+        # При отсутствии utility_layers поведение идентично предыдущей версии
+        combined_internal_layers = {**normalized_layers, **normalized_utility_layers}
 
         # Извлекаем ignore_dirs из конфига для фильтрации
         ignore_dirs_cfg = config.get("ignore_dirs") or []
@@ -86,10 +104,10 @@ class ImportGraphAdapter(IAnalyzer):
             # grimp строит граф всего пакета (он не поддерживает ignore_dirs из коробки)
             graph = grimp.build_graph(package_name, include_external_packages=True)
 
-            # Передаем ignore_dirs в сборщик слоев для ручной фильтрации
+            # Передаём combined_internal_layers — включает utility_layers (core, schemas)
             nodes, edges = self._build_layer_graph(
                 graph=graph,
-                layer_config=normalized_layers,
+                layer_config=combined_internal_layers,
                 external_layer_config=external_layer_config,
                 ignore_dirs=ignore_dirs,
                 package_name=package_name
@@ -104,6 +122,8 @@ class ImportGraphAdapter(IAnalyzer):
                     "package": package_name,
                     "total_modules": len(graph.modules),
                     "layer_prefixes_used": normalized_layers,
+                    # utility_layer_prefixes_used: для верификации что utility_layers подхвачены
+                    "utility_layer_prefixes_used": normalized_utility_layers,
                     "external_layer_prefixes_used": external_layer_config,
                 },
             }
@@ -137,7 +157,7 @@ class ImportGraphAdapter(IAnalyzer):
 
         .. code-block:: json
 
-            { "layer_order": ["routers", "services", "infrastructure", "models", "interfaces"] }
+            { "layer_order": ["routers", "services", "infrastructure", "interfaces", "models"] }
 
         **Формат B (вложенный список групп)** -- слои одного тира сгруппированы внутренней листом;
         индекс внешнего списка задает тир для всех внутренних элементов:
@@ -148,12 +168,16 @@ class ImportGraphAdapter(IAnalyzer):
               "layer_order": [
                 ["routers"],
                 ["services", "infrastructure"],
-                ["models", "interfaces"]
+                ["interfaces"],
+                ["models"]
               ]
             }
 
         Внешние слои из ``external_layers`` автоматически получают тир ``max_tier + 1``
         (самые стабильные зависимости, на них все опираются внутренние слои).
+
+        ``utility_layers`` намеренно не присваиваются автоматически в tier_map —
+        они crosscutting и не участвуют в SDP-проверках.
 
         Возвращает None если ``layer_order`` отсутствует или пустой (fail-silent).
 
@@ -194,6 +218,7 @@ class ImportGraphAdapter(IAnalyzer):
 
         # Авто-присвоение external_layers на max_tier + 1
         # (внешние библиотеки считаются самыми стабильными: I -> 0)
+        # utility_layers НЕ добавляются в tier_map намеренно — они crosscutting
         external_layer_config: Dict[str, Any] = config.get("external_layers") or {}
         if external_layer_config:
             max_tier = max(tier_map.values())
@@ -259,6 +284,8 @@ class ImportGraphAdapter(IAnalyzer):
 
         На выходе всегда возвращает:
         - "routers": ["app.routers"]
+
+        Используется как для layers, так и для utility_layers.
         """
         normalized: Dict[str, List[str]] = {}
         package_prefix = f"{package_name}."
