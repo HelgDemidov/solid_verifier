@@ -281,11 +281,13 @@ class ImportLinterAdapter(IAnalyzer):
         kept = 0
         broken = 0
 
+        # ищет число ДО слова, точно под формат «N kept, M broken»
         stats_match = re.search(
-            r"(?:contracts?\s*:?[^0-9]*kept[^0-9]*([0-9]+)[^0-9]*broken[^0-9]*([0-9]+))",
+            r"([0-9]+)\s+kept[^0-9]+([0-9]+)\s+broken",
             output,
             re.IGNORECASE,
         )
+        
         if stats_match:
             kept = int(stats_match.group(1))
             broken = int(stats_match.group(2))

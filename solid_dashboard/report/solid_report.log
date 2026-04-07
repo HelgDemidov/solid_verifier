@@ -602,18 +602,18 @@
         "instability": 0.6
       },
       {
-        "id": "models",
-        "label": "models",
-        "ca": 4,
-        "ce": 1,
-        "instability": 0.2
-      },
-      {
         "id": "interfaces",
         "label": "interfaces",
         "ca": 2,
         "ce": 1,
         "instability": 0.33
+      },
+      {
+        "id": "models",
+        "label": "models",
+        "ca": 4,
+        "ce": 1,
+        "instability": 0.2
       },
       {
         "id": "core",
@@ -961,11 +961,11 @@
         "infrastructure": [
           "app.infrastructure"
         ],
-        "models": [
-          "app.models"
-        ],
         "interfaces": [
           "app.interfaces"
+        ],
+        "models": [
+          "app.models"
         ]
       },
       "utility_layer_prefixes_used": {
@@ -994,12 +994,13 @@
     }
   },
   "import_linter": {
-    "is_success": false,
+    "is_success": true,
     "contracts_checked": 1,
-    "broken_contracts": 1,
-    "kept_contracts": 0,
+    "broken_contracts": 0,
+    "kept_contracts": 1,
     "violations": [],
-    "raw_output": "=============\nImport Linter\n=============\n\n\nNo matches for ignored import * -> app.core.*."
+    "violation_details": [],
+    "raw_output": "=============\nImport Linter\n=============\n\n\n---------\nContracts\n---------\n\nAnalyzed 32 files, 42 dependencies.\n-----------------------------------\n\nScopus API layered architecture KEPT\n\nContracts: 1 kept, 0 broken."
   },
   "pyan3": {
     "is_success": true,
