@@ -12,6 +12,9 @@
 #    dict.keys() секции layers используется только как fallback.
 # 4. Парсинг текстового вывода линтера (ANSI-очистка) для подсчета нарушенных/
 #    соблюденных контрактов и извлечения списка конкретных нарушений.
+# 5. Структурированное поле violation_details: List[Dict] содержит разобранные
+#    нарушения в виде {contract_name, status, broken_imports} — готово для
+#    кросс-адаптерной агрегации (report_aggregator, будущий этап).
 # ===================================================================================================
 
 
@@ -25,6 +28,10 @@ from solid_dashboard.interfaces.analyzer import IAnalyzer  # базовый ин
 
 # Регулярное выражение для очистки вывода от ANSI-кодов (цветной вывод, рамки и т.п.)
 ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+# Паттерн строки с нарушенным импортом: "    some.module -> other.module"
+# import-linter выводит такие строки с отступом под именем контракта
+_BROKEN_IMPORT_RE = re.compile(r"^\s+(\S+)\s*->\s*(\S+)\s*$")
 
 
 class ImportLinterAdapter(IAnalyzer):
@@ -95,14 +102,13 @@ class ImportLinterAdapter(IAnalyzer):
             linting_passed = completed.returncode == 0
             kept, broken = self._parse_contract_stats(clean_output, linting_passed)
 
-            # Извлекаем имена нарушенных контрактов из вывода линтера
+            # Извлекаем имена нарушенных контрактов и строим оба поля:
+            # violations: List[str] — для обратной совместимости JSON-отчета
+            # violation_details: List[Dict] — структурированный формат для будущей агрегации
             violations: List[str] = []
-            for line in clean_output.splitlines():
-                stripped = line.strip()
-                if stripped.endswith(" BROKEN"):
-                    name_part = stripped[: -len(" BROKEN")].rstrip()
-                    if name_part:
-                        violations.append(name_part)
+            violation_details: List[Dict[str, Any]] = []
+
+            violations, violation_details = self._parse_violations(clean_output)
 
             return {
                 "is_success": linting_passed,
@@ -110,6 +116,7 @@ class ImportLinterAdapter(IAnalyzer):
                 "broken_contracts": broken,
                 "kept_contracts": kept,
                 "violations": violations,
+                "violation_details": violation_details,
                 "raw_output": clean_output,
             }
         except FileNotFoundError:
@@ -197,6 +204,74 @@ class ImportLinterAdapter(IAnalyzer):
             cfg.write(f)
 
     @staticmethod
+    def _parse_violations(
+        output: str,
+    ) -> tuple[List[str], List[Dict[str, Any]]]:
+        """
+        Разбирает вывод lint-imports и возвращает два представления нарушений:
+
+        violations: List[str]
+            Плоский список имен нарушенных контрактов — для обратной совместимости
+            существующего JSON-отчета. Пример: ["Scopus API layered architecture"]
+
+        violation_details: List[Dict]
+            Структурированный список нарушений вида:
+            [
+              {
+                "contract_name": "Scopus API layered architecture",
+                "status": "BROKEN",
+                "broken_imports": [
+                  {"importer": "app.routers.search", "imported": "app.models.paper"}
+                ]
+              }
+            ]
+            Используется для кросс-адаптерной агрегации (будущий report_aggregator).
+            При отсутствии строк с '->' broken_imports остается пустым списком —
+            это корректное состояние: факт нарушения подтвержден returncode, детали недоступны.
+        """
+        violations: List[str] = []
+        violation_details: List[Dict[str, Any]] = []
+
+        # Текущий контракт, для которого собираем broken_imports
+        current_detail: Dict[str, Any] | None = None
+
+        for line in output.splitlines():
+            stripped = line.strip()
+
+            # Строка вида "Contract Name BROKEN" — начало нового нарушенного контракта
+            if stripped.endswith(" BROKEN"):
+                # Сохраняем предыдущий незакрытый контракт перед началом нового
+                if current_detail is not None:
+                    violation_details.append(current_detail)
+
+                contract_name = stripped[: -len(" BROKEN")].rstrip()
+                if contract_name:
+                    violations.append(contract_name)
+                    current_detail = {
+                        "contract_name": contract_name,
+                        "status": "BROKEN",
+                        "broken_imports": [],
+                    }
+                else:
+                    current_detail = None
+                continue
+
+            # Строка вида "    importer -> imported" — конкретный сломанный импорт
+            if current_detail is not None:
+                match = _BROKEN_IMPORT_RE.match(line)
+                if match:
+                    current_detail["broken_imports"].append({
+                        "importer": match.group(1),
+                        "imported": match.group(2),
+                    })
+
+        # Сохраняем последний незакрытый контракт после конца вывода
+        if current_detail is not None:
+            violation_details.append(current_detail)
+
+        return violations, violation_details
+
+    @staticmethod
     def _parse_contract_stats(output: str, linting_passed: bool) -> tuple[int, int]:
         """
         Извлекает количество kept/broken контрактов из строки вида
@@ -233,5 +308,6 @@ class ImportLinterAdapter(IAnalyzer):
             "broken_contracts": 0,
             "kept_contracts": 0,
             "violations": [],
+            "violation_details": [],
             "raw_output": "",
         }
