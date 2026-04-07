@@ -1,14 +1,14 @@
 # ===================================================================================================
 # Адаптер графа импортов (Import Graph Adapter)
-# 
-# Ключевая роль: Построение архитектурного графа зависимостей между слоями приложения 
+#
+# Ключевая роль: Построение архитектурного графа зависимостей между слоями приложения
 # и расчет метрик стабильности Мартина (Martin's Stability Metrics).
-# 
+#
 # Основные архитектурные задачи:
 # 1. Построение полного графа импортов Python-пакета с использованием библиотеки grimp.
 # 2. Маппинг физических модулей на логические архитектурные слои (layers) на основе конфигурации из solid_config.json.
 # 3. Интеграция внешних библиотек (external_layers) в общий граф для контроля DIP (Dependency Inversion Principle).
-# 4. Расчет метрик: Ca (Afferent Coupling), Ce (Efferent Coupling), Instability (I) 
+# 4. Расчет метрик: Ca (Afferent Coupling), Ce (Efferent Coupling), Instability (I)
 #    для каждого слоя, выявление потенциальных нарушений потока управления.
 # ===================================================================================================
 
@@ -26,6 +26,25 @@ class ImportGraphAdapter(IAnalyzer):
 
     Использует тот же движок, что и import-linter. Это снижает риск
     расхождения между визуальным графом и контрактной проверкой.
+
+    Схема словаря нарушения (violation) в поле ``violations``:
+
+    .. code-block:: python
+
+        {
+            "rule": str,          # идентификатор правила, например "SDP-001" или "SAP-001"
+            "layer": str,         # имя слоя, нарушающего правило
+            "instability": float, # фактическое значение I для данного слоя
+            "dependency": str,    # имя слоя-зависимости (target), нарушающего отношение
+            "dep_instability": float,  # значение I зависимости
+            "severity": str,      # "error" | "warning" | "info"
+            "message": str,       # человекочитаемое описание нарушения
+            "evidence": None,     # TODO: reserved for SDP/SAP evidence payload (dict | None)
+        }
+
+    Поле ``evidence`` зарезервировано для будущего слоя доказательств:
+    конкретных модулей и рёбер импорта, подтверждающих нарушение метрики.
+    До реализации SDP/SAP-детектора всегда равно None.
     """
 
     @property
@@ -41,12 +60,17 @@ class ImportGraphAdapter(IAnalyzer):
 
         layer_config: Dict[str, List[str]] = config.get("layers", {})
         if not layer_config:
-            return {"nodes": [], "edges": [], "error": "no layer configuration found in solid_config.json"}
+            return {
+                "nodes": [],
+                "edges": [],
+                "violations": [],  # scaffold: пустой список до реализации SDP/SAP-детектора
+                "error": "no layer configuration found in solid_config.json",
+            }
 
         external_layer_config: Dict[str, List[str]] = config.get("external_layers", {})
         normalized_layers = self._normalize_layer_config(layer_config, package_name)
 
-        # 1. Извлекаем ignore_dirs из конфига для фильтрации
+        # Извлекаем ignore_dirs из конфига для фильтрации
         ignore_dirs_cfg = config.get("ignore_dirs") or []
         ignore_dirs = [d.strip() for d in ignore_dirs_cfg if d and d.strip()]
 
@@ -60,7 +84,7 @@ class ImportGraphAdapter(IAnalyzer):
         try:
             # grimp строит граф всего пакета (он не поддерживает ignore_dirs из коробки)
             graph = grimp.build_graph(package_name, include_external_packages=True)
-            
+
             # Передаем ignore_dirs в сборщик слоев для ручной фильтрации
             nodes, edges = self._build_layer_graph(
                 graph=graph,
@@ -73,15 +97,22 @@ class ImportGraphAdapter(IAnalyzer):
             return {
                 "nodes": nodes,
                 "edges": edges,
+                # scaffold: violations всегда пустой до реализации SDP/SAP-детектора (коммит 4+)
+                "violations": [],
                 "debug_info": {
                     "package": package_name,
                     "total_modules": len(graph.modules),
                     "layer_prefixes_used": normalized_layers,
                     "external_layer_prefixes_used": external_layer_config,
-                }
+                },
             }
         except Exception as exc:
-            return {"nodes": [], "edges": [], "error": str(exc)}
+            return {
+                "nodes": [],
+                "edges": [],
+                "violations": [],  # scaffold: контракт поля сохраняется даже при ошибке
+                "error": str(exc),
+            }
         finally:
             # Безопасное удаление из sys.path
             if added_to_path and parent_dir in sys.path:
@@ -94,7 +125,7 @@ class ImportGraphAdapter(IAnalyzer):
         """
         if not ignore_dirs:
             return False
-            
+
         parts = module_name.split('.')
         # Если модуль начинается с имени нашего пакета, проверяем его внутренние пути
         if parts and parts[0] == package_name:
@@ -167,7 +198,7 @@ class ImportGraphAdapter(IAnalyzer):
         layer_edges: Set[Tuple[str, str]] = set()
 
         for module_name in graph.modules:
-            # 1. Фильтрация исходящего модуля по ignore_dirs
+            # Фильтрация исходящего модуля по ignore_dirs
             if self._is_ignored(module_name, ignore_dirs, package_name):
                 continue
 
@@ -181,7 +212,7 @@ class ImportGraphAdapter(IAnalyzer):
                 continue
 
             for imported_module_name in imported_modules:
-                # 2. Фильтрация импортируемого модуля по ignore_dirs
+                # Фильтрация импортируемого модуля по ignore_dirs
                 if self._is_ignored(imported_module_name, ignore_dirs, package_name):
                     continue
 
