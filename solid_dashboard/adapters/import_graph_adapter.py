@@ -10,6 +10,7 @@
 # 3. Интеграция внешних библиотек (external_layers) в общий граф для контроля DIP (Dependency Inversion Principle).
 # 4. Расчет метрик: Ca (Afferent Coupling), Ce (Efferent Coupling), Instability (I)
 #    для каждого слоя, выявление потенциальных нарушений потока управления.
+# 5. Разрешение tier-мапа из solid_config.json для SDP/SAP-проверок (коммит 4+).
 # ===================================================================================================
 
 
@@ -43,7 +44,7 @@ class ImportGraphAdapter(IAnalyzer):
         }
 
     Поле ``evidence`` зарезервировано для будущего слоя доказательств:
-    конкретных модулей и рёбер импорта, подтверждающих нарушение метрики.
+    конкретных модулей и ребер импорта, подтверждающих нарушение метрики.
     До реализации SDP/SAP-детектора всегда равно None.
     """
 
@@ -52,7 +53,7 @@ class ImportGraphAdapter(IAnalyzer):
         return "import_graph"
 
     def run(self, target_dir: str, context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
-        # комментарий (ru): параметр context требуется интерфейсом IAnalyzer но не используется здесь
+        # параметр context требуется интерфейсом IAnalyzer но не используется здесь
         _ = context
 
         target_path = Path(target_dir).resolve()
@@ -97,7 +98,7 @@ class ImportGraphAdapter(IAnalyzer):
             return {
                 "nodes": nodes,
                 "edges": edges,
-                # scaffold: violations всегда пустой до реализации SDP/SAP-детектора (коммит 4+)
+                # scaffold: violations всегда пустой до реализации SDP/SAP-детектора (коммит 5+)
                 "violations": [],
                 "debug_info": {
                     "package": package_name,
@@ -117,6 +118,116 @@ class ImportGraphAdapter(IAnalyzer):
             # Безопасное удаление из sys.path
             if added_to_path and parent_dir in sys.path:
                 sys.path.remove(parent_dir)
+
+    # ------------------------------------------------------------------
+    # Tier-map resolver (scaffold для SDP/SAP-детектора, коммит 5+)
+    # ------------------------------------------------------------------
+
+    def _resolve_tier_map(
+        self,
+        config: Dict[str, Any],
+    ) -> Optional[Dict[str, int]]:
+        """
+        Строит tier-мап из ``solid_config.json``.
+
+        Поддерживает два формата:
+
+        **Формат A (плоский список)** -- порядок слоев от наиболее нестабильного (tier 0) к
+        наиболее стабильному (tier N):
+
+        .. code-block:: json
+
+            { "layer_order": ["routers", "services", "infrastructure", "models", "interfaces"] }
+
+        **Формат B (вложенный список групп)** -- слои одного тира сгруппированы внутренней листом;
+        индекс внешнего списка задает тир для всех внутренних элементов:
+
+        .. code-block:: json
+
+            {
+              "layer_order": [
+                ["routers"],
+                ["services", "infrastructure"],
+                ["models", "interfaces"]
+              ]
+            }
+
+        Внешние слои из ``external_layers`` автоматически получают тир ``max_tier + 1``
+        (самые стабильные зависимости, на них все опираются внутренние слои).
+
+        Возвращает None если ``layer_order`` отсутствует или пустой (fail-silent).
+
+        :returns: словарь {layer_name: tier_index} или None
+        """
+        raw_order = config.get("layer_order")
+
+        # Файл-сайлент: если поле отсутствует или некорректного типа - возвращаем None
+        if not raw_order or not isinstance(raw_order, list):
+            return None
+
+        tier_map: Dict[str, int] = {}
+
+        # Определяем формат через первый элемент: строка = формат A, список = формат B
+        first = raw_order[0] if raw_order else None
+
+        if isinstance(first, str):
+            # Формат A: плоский список строк, каждая получает свой tier
+            for tier_index, layer_name in enumerate(raw_order):
+                if isinstance(layer_name, str) and layer_name.strip():
+                    tier_map[layer_name.strip()] = tier_index
+
+        elif isinstance(first, list):
+            # Формат B: вложенный список, tier = индекс внешнего списка
+            for tier_index, group in enumerate(raw_order):
+                if not isinstance(group, list):
+                    continue
+                for layer_name in group:
+                    if isinstance(layer_name, str) and layer_name.strip():
+                        tier_map[layer_name.strip()] = tier_index
+
+        else:
+            # Неизвестный формат: возвращаем None
+            return None
+
+        if not tier_map:
+            return None
+
+        # Авто-присвоение external_layers на max_tier + 1
+        # (внешние библиотеки считаются самыми стабильными: I -> 0)
+        external_layer_config: Dict[str, Any] = config.get("external_layers") or {}
+        if external_layer_config:
+            max_tier = max(tier_map.values())
+            external_tier = max_tier + 1
+            for ext_layer_name in external_layer_config:
+                if ext_layer_name not in tier_map:
+                    tier_map[ext_layer_name] = external_tier
+
+        return tier_map
+
+    def _get_interface_layer_names(self, config: Dict[str, Any]) -> List[str]:
+        """
+        Извлекает список слоев-интерфейсов из конфигурации.
+
+        Читает поле ``interface_layers`` из ``solid_config.json``.
+        Для этих слоев стабильность I -> 0 является ожидаемой,
+        и SAP-детектор будет применять повышенный порог предупреждения.
+
+        Возвращает пустой список если поле отсутствует (fail-silent).
+
+        :returns: список имен слоев-интерфейсов
+        """
+        raw = config.get("interface_layers")
+
+        # Файл-сайлент: отсутствие поля или некорректный тип не ломают пиплайн
+        if not raw or not isinstance(raw, list):
+            return []
+
+        # Фильтруем: только непустые строки
+        return [name.strip() for name in raw if isinstance(name, str) and name.strip()]
+
+    # ------------------------------------------------------------------
+    # Существующие приватные методы
+    # ------------------------------------------------------------------
 
     def _is_ignored(self, module_name: str, ignore_dirs: List[str], package_name: str) -> bool:
         """
