@@ -32,9 +32,7 @@ class ImportGraphAdapter(IAnalyzer):
     Использует тот же движок, что и import-linter. Это снижает риск
     расхождения между визуальным графом и контрактной проверкой.
 
-    Схема словаря нарушения SDP (rule="SDP-001") в поле ``violations``:
-
-    .. code-block:: python
+    Схема словаря нарушения SDP (rule="SDP-001") в поле ``violations``::
 
         {
             "rule": str,               # "SDP-001"
@@ -44,12 +42,10 @@ class ImportGraphAdapter(IAnalyzer):
             "dep_instability": float,  # I(target)
             "severity": str,           # "error"
             "message": str,            # человекочитаемое описание
-            "evidence": None,          # reserved
+            "evidence": [],            # reserved: будет заполнено pipeline-оркестратором
         }
 
-    Схема словаря нарушения Skip-Layer (rule="SLP-001") в поле ``violations``:
-
-    .. code-block:: python
+    Схема словаря нарушения Skip-Layer (rule="SLP-001") в поле ``violations``::
 
         {
             "rule": str,               # "SLP-001"
@@ -69,7 +65,8 @@ class ImportGraphAdapter(IAnalyzer):
         I(source) <= I(target) + tolerance
 
     Нарушение: source зависит от target, но target нестабильнее source.
-    Пример-якорь направления условия:
+    Пример-якорь направления условия::
+
         services (I=0.8) → models (I=0.2): 0.8 <= 0.2 + 0.10? → False → violation
         routers  (I=1.0) → services (I=0.8): 1.0 <= 0.8 + 0.10? → False → violation
         models   (I=0.2) → db_libs  (I=0.0): 0.2 <= 0.0 + 0.10? → False → violation
@@ -77,10 +74,16 @@ class ImportGraphAdapter(IAnalyzer):
 
     SLP (Skip-Layer Principle): слой не должен зависеть напрямую от слоев,
     отстоящих более чем на 1 тир вниз по иерархии.
-    Пример-якорь:
+    Пример-якорь::
+
         routers (tier=0) → models (tier=4): skip_distance=3 → error
         routers (tier=0) → infrastructure (tier=2): skip_distance=1 → warning
-        services (tier=1) → interfaces (tier=3): skip_distance=1, interfaces в interface_layers → warning
+        services (tier=1) → interfaces (tier=3): skip_distance=1,
+            skipped=[infrastructure], interfaces — целевой слой в interface_layers → warning
+        infrastructure (tier=2) → models (tier=4): skip_distance=1,
+            skipped=[interfaces], interfaces в interface_layers → error (обход абстракции)
+        routers (tier=0) → interfaces (tier=3): skip_distance=2,
+            target в interface_layers → warning (зависимость от абстракции, не жёсткий error)
 
     Семантика utility_layers (crosscutting-слои):
     - ``utility_layers`` (core, schemas) участвуют в графе и метриках Ca/Ce/I.
@@ -244,22 +247,33 @@ class ImportGraphAdapter(IAnalyzer):
 
             skip_distance = tier(target) - tier(source) - 1 >= 1
 
-        Пример-якорь:
-
-        .. code-block:: text
+        Пример-якорь::
 
             routers (tier=0) → models (tier=4): skip_distance=3 → error
             routers (tier=0) → infrastructure (tier=2): skip_distance=1 → warning
             services (tier=1) → interfaces (tier=3): skip_distance=1,
-                interfaces в interface_layers → warning (ISP-aware downgrade)
+                skipped=[infrastructure], target=interfaces в interface_layers → warning
+            infrastructure (tier=2) → models (tier=4): skip_distance=1,
+                skipped=[interfaces], interfaces в interface_layers → error (обход абстракции)
+            routers (tier=0) → interfaces (tier=3): skip_distance=2,
+                target в interface_layers → warning (зависимость от абстракции)
             infrastructure (tier=2) → db_libs (tier=5): skip_distance=2 → error
 
-        Severity-логика:
-        - skip_distance >= 2 → ``error``   (прыжок через 2+ тира, явная архитектурная проблема)
-        - skip_distance == 1 → ``warning`` (прыжок через 1 тир, допустимо при явном обосновании)
-        - ISP-aware downgrade: если target входит в ``interface_layers`` →
-          severity понижается до ``warning`` независимо от skip_distance,
-          так как прямые зависимости от интерфейсных слоев архитектурно допустимы
+        Severity-логика (приоритет ветвей сверху вниз):
+
+        1. ``target in interface_set`` → ``warning``
+           Зависимость от интерфейсного слоя (любой skip_distance) считается
+           менее жёсткой: прямая зависимость от абстракции архитектурно допустима.
+
+        2. ``пропущенные слои ∩ interface_set`` → ``error``
+           Ребро обходит интерфейсный слой — это нарушение ISP/DIP.
+           Пример: infrastructure→models пропускает interfaces → error.
+
+        3. ``skip_distance >= 2`` → ``error``
+           Прыжок через 2+ тира без interface в пропущенных — явная проблема.
+
+        4. иначе → ``warning``
+           Прыжок через 1 тир без interface в пропущенных — допустимо при обосновании.
 
         Evidence поле: список пропущенных tier-индексов (не None),
         позволяет быстро найти какие промежуточные слои были обойдены.
@@ -271,7 +285,7 @@ class ImportGraphAdapter(IAnalyzer):
 
         :param layer_edges: множество рёбер графа (source, target)
         :param tier_map: {layer_name: tier_index} или None
-        :param interface_layer_names: список слоев-интерфейсов для ISP-aware downgrade
+        :param interface_layer_names: список слоев-интерфейсов для severity-логики
         :returns: список violation-словарей с rule="SLP-001"
         """
         violations: List[Dict[str, Any]] = []
@@ -285,7 +299,7 @@ class ImportGraphAdapter(IAnalyzer):
         for layer_name, tier_index in tier_map.items():
             tier_to_layers[tier_index].append(layer_name)
 
-        # Быстрый lookup для ISP-aware downgrade
+        # Быстрый lookup для проверки interface-слоев
         interface_set: Set[str] = set(interface_layer_names)
 
         for source, target in sorted(layer_edges):
@@ -304,22 +318,28 @@ class ImportGraphAdapter(IAnalyzer):
             if skip_distance < 1:
                 continue
 
-            # ISP-aware downgrade: интерфейсные слои допускают прямые зависимости
-            # (слой может напрямую зависеть от абстракций без проксирования через соседей)
-            if target in interface_set:
-                severity = "warning"
-            elif skip_distance >= 2:
-                # Прыжок через 2+ тира — явная архитектурная проблема
-                severity = "error"
-            else:
-                # Прыжок через 1 тир — предупреждение
-                severity = "warning"
-
-            # Evidence: конкретные тиры, которые были обойдены
+            # Evidence: конкретные тир-индексы, которые были обойдены
             skipped_tier_indices = list(range(t_source + 1, t_target))
             skipped_layer_names: List[str] = []
             for skipped_tier in skipped_tier_indices:
                 skipped_layer_names.extend(tier_to_layers.get(skipped_tier, []))
+
+            # Пересечение пропущенных слоёв с interface_set для проверки обхода абстракции
+            skipped_interface_layers = set(skipped_layer_names) & interface_set
+
+            # Severity-логика (приоритет ветвей строго фиксирован):
+            # 1. Целевой слой — интерфейс: зависимость от абстракции, всегда warning
+            # 2. Обход интерфейсного слоя в промежутке: нарушение ISP/DIP, error
+            # 3. Прыжок через 2+ тира без interface в пропущенных: error
+            # 4. Прыжок через 1 тир без interface: warning (допустимо при обосновании)
+            if target in interface_set:
+                severity = "warning"
+            elif skipped_interface_layers:
+                severity = "error"
+            elif skip_distance >= 2:
+                severity = "error"
+            else:
+                severity = "warning"
 
             violations.append({
                 "rule": "SLP-001",
@@ -360,9 +380,7 @@ class ImportGraphAdapter(IAnalyzer):
         Нарушение фиксируется когда source зависит от target,
         но target нестабильнее source (с учётом допуска tolerance).
 
-        Пример-якорь направления условия (tolerance=0.10, конфиг проекта):
-
-        .. code-block:: text
+        Пример-якорь направления условия (tolerance=0.10, конфиг проекта)::
 
             services (I=0.80) → models    (I=0.20): 0.80 <= 0.20+0.10=0.30? NO  → violation
             routers  (I=1.00) → services  (I=0.80): 1.00 <= 0.80+0.10=0.90? NO  → violation
@@ -375,7 +393,7 @@ class ImportGraphAdapter(IAnalyzer):
         - tier_map равен None (нет layer_order в конфиге)
 
         Исключения из ``allowed_dependency_exceptions`` фильтруются по
-        {\"source\": str, \"target\": str} до применения SDP-проверки.
+        {"source": str, "target": str} до применения SDP-проверки.
 
         :param layer_edges: множество рёбер графа (source, target)
         :param instability_map: {layer_name: instability_value}
@@ -424,7 +442,7 @@ class ImportGraphAdapter(IAnalyzer):
                         f"but {target} is less stable than {source} "
                         f"(violation margin: {round(i_source - i_target, 2)}, tolerance: {tolerance})"
                     ),
-                    "evidence": None,  # reserved
+                    "evidence": [],  # reserved: будет заполнено pipeline-оркестратором
                 })
 
         return violations
@@ -443,16 +461,12 @@ class ImportGraphAdapter(IAnalyzer):
         Поддерживает два формата:
 
         **Формат A (плоский список)** -- порядок слоев от наиболее нестабильного (tier 0) к
-        наиболее стабильному (tier N):
-
-        .. code-block:: json
+        наиболее стабильному (tier N)::
 
             { "layer_order": ["routers", "services", "infrastructure", "interfaces", "models"] }
 
         **Формат B (вложенный список групп)** -- слои одного тира сгруппированы внутренней листом;
-        индекс внешнего списка задает тир для всех внутренних элементов:
-
-        .. code-block:: json
+        индекс внешнего списка задает тир для всех внутренних элементов::
 
             {
               "layer_order": [
@@ -526,7 +540,9 @@ class ImportGraphAdapter(IAnalyzer):
         Читает поле ``interface_layers`` из ``solid_config.json``.
         Для этих слоев стабильность I -> 0 является ожидаемой,
         и SAP-детектор будет применять повышенный порог предупреждения.
-        В SLP-детекторе эти слои получают ISP-aware downgrade severity до warning.
+        В SLP-детекторе эти слои используются для severity-логики:
+        - зависимость с целевым интерфейсным слоем → warning
+        - обход интерфейсного слоя в промежутке → error
 
         Возвращает пустой список если поле отсутствует (fail-silent).
 
