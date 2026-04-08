@@ -23,7 +23,7 @@ The tool is project-agnostic: it can be reused across different Python codebases
   - Define external "library layers" (database, web frameworks, etc.).
   - Secure secret management (LLM keys are automatically loaded from a `.env` file, keeping the JSON config clean).
 - **Static metrics**:
-  - **Complexity and maintainability** via `radon` (Cyclomatic Complexity, Maintainability Index).
+  - **Complexity and maintainability** via `radon`: Cyclomatic Complexity (CC) per function/method with rank A–F, and Maintainability Index (MI, 0–100) per file with rank A–C — aggregated with `total_files`, `mean_mi`, and `low_mi_count` (files ranked C).
   - **Cohesion** via a custom **LCOM4** adapter based on Python's built-in `ast` (with smart filtering of properties and utility methods to eliminate false positives).
   - **Call graph and dead code** via `pyan3` (fully safe execution with no global environment state mutations, a two-pass name-collision detector, and confidence labelling of edges).
 - **Architecture and dependencies**:
@@ -58,9 +58,12 @@ At the static-analysis level, the dashboard is implemented as an internal framew
 The LLM layer is implemented separately from `IAnalyzer` and is invoked directly by `pipeline.py` based on heuristic results.
 
 - **`radon_adapter.py`**  
-  The adapter invokes `radon cc` as a subprocess, strictly scoping analysis to the target directory, with support for excluding directories via the `-i` flag: empty strings and whitespace-only entries are filtered out before the command is assembled. Output is parsed into a normalized flat list of records — each containing the name, type (`function`/`method`), cyclomatic complexity, rank (A–F), line number, and file path.
+  Runs two independent `radon` subprocesses against the target directory, both respecting `ignore_dirs` via the `-i` flag (empty strings and whitespace-only entries are filtered before the command is assembled).
 
-  Additionally, the adapter integrates `lizard` solely to retrieve `parameter_count` — the number of parameters per function or method, which is not available in standard radon output. Metrics computed by both tools (e.g., CC) are intentionally deduplicated, with radon taking precedence. The `parameter_count` value includes `self` for methods — normalization is deliberately deferred to the aggregation layer.
+  **`radon cc --json`** — produces a normalized flat list of records per function/method: name, type (`function`/`method`), cyclomatic complexity, rank (A–F), line number, and file path. Items are sorted by complexity descending.
+  **`radon mi --json`** — produces a per-file Maintainability Index report (MI score 0–100, rank A/B/C). Aggregated into a `maintainability` sub-object with `total_files`, `mean_mi`, `low_mi_count` (files ranked C, i.e. MI < 10), and a `files` list sorted by MI ascending (worst first). **MI failure is fully isolated:** any subprocess or parse error returns an empty `{}` for `maintainability` and never interrupts the CC result.
+
+  Additionally, the adapter integrates `lizard` solely to retrieve `parameter_count` — the number of parameters per function or method (including `self` for methods), which is not available in standard radon output. Metrics computed by both tools (e.g., CC) are intentionally deduplicated, with radon taking precedence. Normalization of `parameter_count` is deliberately deferred to the aggregation layer.
 
 - **`cohesion_adapter.py`**  
   A custom, dependency-free implementation of the **LCOM4** (Lack of Cohesion of Methods 4) metric built entirely on Python's built-in `ast`. The adapter consists of two collaborating components: `CohesionAdapter` (the main adapter implementing `IAnalyzer`) and the helper `class_classifier.py` (semantic class classification). The algorithm operates in two passes:

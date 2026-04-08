@@ -455,6 +455,173 @@
         "parameter_count": 2
       }
     ],
+    "maintainability": {
+      "total_files": 32,
+      "mean_mi": 93.14,
+      "low_mi_count": 0,
+      "files": [
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "mi": 69.81,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "mi": 71.26,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "mi": 72.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "mi": 73.91,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "mi": 77.95,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py",
+          "mi": 80.22,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "mi": 81.15,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\article_schemas.py",
+          "mi": 85.41,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "mi": 86.64,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "mi": 89.44,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "mi": 96.92,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "mi": 97.77,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\database.py",
+          "mi": 97.98,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "mi": 99.99,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\base.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        },
+        {
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\__init__.py",
+          "mi": 100.0,
+          "rank": "A"
+        }
+      ]
+    },
     "lizard_used": true
   },
   "cohesion": {

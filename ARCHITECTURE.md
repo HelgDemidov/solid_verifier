@@ -40,7 +40,7 @@ SOLID Verifier — это **трёхслойный статический ана
 
 | Адаптер | Что делает | Ключевые детали | Статус |
 |---|---|---|---|
-| `RadonAdapter` | CC через `radon cc --json` (subprocess) + обогащение `parameter_count` через Lizard | Двойная сортировка: radon-индекс → lizard-матч по `(filepath, lineno)`. Изолированный subprocess, `ignore_dirs` через `-i`. Lizard — опциональная зависимость (`LIZARD_AVAILABLE`). Ошибки индексации → `RuntimeWarning`, не исключение | ✅ Полный |
+| `RadonAdapter` | CC через `radon cc --json` + MI через `radon mi --json` (два независимых subprocess) + обогащение `parameter_count` через Lizard | **Два subprocess:** `_run_mi()` вызывается после CC, использует те же `ignore_dirs`. Сбой MI изолирован: возвращает `{}`, не ломает CC-результат. Сортировка: CC-список → по сложности DESC; MI-список → по MI ASC (худшие первыми). `maintainability` — под-объект в возвращаемом dict. Lizard — опциональная зависимость (`LIZARD_AVAILABLE`). Ошибки индексации → `RuntimeWarning`, не исключение | ✅ Полный |
 | `CohesionAdapter` | LCOM4 через двухпроходной собственный AST | Pass 1: сбор классов, их методов, атрибутов. Pass 2: обогащение атрибутами предков через MRO. `_MethodUsageVisitor`. DFS-подсчёт компонент. Использует `adapters/class_classifier.py` | ✅ Полный |
 | `ImportGraphAdapter` | Граф слоёв через `grimp`, метрики Ca/Ce/I (Martin Stability), SDP violations (SDP-001), Skip-Layer violations (SLP-001) | Два детектора: `_detect_sdp_violations()` и `_detect_skip_layer_violations()`. `utility_layers` (core, schemas) — в графе, но tier=None → fail-silent в обоих детекторах. `sdp_tolerance=0.10` из конфига. `allowed_dependency_exceptions` = models→db_libs (SQLAlchemy). Два поля `evidence` в нарушениях зарезервированы для будущей агрегации | ✅ Полный |
 | `ImportLinterAdapter` | Проверка контрактов слоёв через `lint-imports` CLI | Динамически генерирует `.importlinter_auto_<package>` из базового `.importlinter`, заменяя `root_packages` и `layers`. `layer_order` — единственный источник истины для порядка. Атомарная запись через `.tmp`. `unmatched_ignore_imports=warn` — страховочный слой. Парсит `violation_details: List[Dict]` — готово для будущего `report_aggregator` | ✅ Полный |
@@ -156,7 +156,10 @@ SOLID Verifier — это **трёхслойный статический ана
   context = {}
 
   1. RadonAdapter.run(app/, context, config)
-     → {items: [...], mean_cc, high_complexity_count, lizard_used}
+     → subprocess: radon cc --json  → items[], mean_cc, high_complexity_count
+     → subprocess: radon mi --json  → maintainability{total_files, mean_mi, low_mi_count, files[]}
+                                       (при сбое: maintainability = {})
+     → {items, mean_cc, high_complexity_count, maintainability, lizard_used}
      context["radon"] = result
 
   2. CohesionAdapter.run(app/, context, config)
@@ -224,22 +227,24 @@ SOLID Verifier — это **трёхслойный статический ана
 
 1. **`schema.py` содержит `PydepsResult`** — артефакт до-рефакторинговой эпохи (когда был pydeps-адаптер). Класс нигде не используется, не удалён. Технический долг.
 
-2. **Два классификатора**: `adapters/class_classifier.py` (4 категории-строки, без import_aliases) и `llm/analysis/class_role.py` (4 Enum-роли, InfraScore, import_aliases). Разные API, разная семантика, потенциально разная классификация edge-cases.
+2. **`schema.py` теперь содержит `MaintainabilityFileMetrics` и `MaintainabilityResult`** — Pydantic-схемы для поуфайлового MI-отчёта. `RadonResult` расширен двумя опциональными полями: `maintainability: Optional[MaintainabilityResult] = None` и `lizard_used: bool = False`. Поле `maintainability` может быть `None` в Pydantic-схеме или пустым `{}` в сыром dict — это нормальное состояние при сбое `radon mi`.
 
-3. **`_build_context()` — документированная заглушка**: LLM видит только source_code кандидата в изоляции. `project_map` передаётся в метод, но игнорируется. Комментарий в коде прямо говорит о будущем расширении.
+3. **Два классификатора**: `adapters/class_classifier.py` (4 категории-строки, без import_aliases) и `llm/analysis/class_role.py` (4 Enum-роли, InfraScore, import_aliases). Разные API, разная семантика, потенциально разная классификация edge-cases.
 
-4. **`LSP-H-004._parent_is_pure_interface()`** — частичная заглушка для `InterfaceInfo`: класс из `project_map.interfaces` не может быть верифицирован через PURE_INTERFACE (нет `source_code`), метод возвращает `False`. Это означает: если родитель — зарегистрированный Protocol без source_code, LSP-H-004 может выдать ложный Finding.
+4. **`_build_context()` — документированная заглушка**: LLM видит только source_code кандидата в изоляции. `project_map` передаётся в метод, но игнорируется. Комментарий в коде прямо говорит о будущем расширении.
 
-5. **`response_schema.json` содержит пример с `"rule": "OCP-Violation-TypeBranching"`**, тогда как код игнорирует `rule` из LLM-ответа. Если модель ориентируется на пример, она напишет нестандартный rule-код, который молча выбрасывается.
+5. **`LSP-H-004._parent_is_pure_interface()`** — частичная заглушка для `InterfaceInfo`: класс из `project_map.interfaces` не может быть верифицирован через PURE_INTERFACE (нет `source_code`), метод возвращает `False`. Это означает: если родитель — зарегистрированный Protocol без source_code, LSP-H-004 может выдать ложный Finding.
 
-6. **`max_tokens_per_run = 3000`** — тестовый лимит. Бюджет проверяется **до** запроса, не после: исчерпание бюджета означает, что оставшиеся кандидаты вообще не попадут к LLM. Порядок обработки — по убыванию `priority`.
+6. **`response_schema.json` содержит пример с `"rule": "OCP-Violation-TypeBranching"`**, тогда как код игнорирует `rule` из LLM-ответа. Если модель ориентируется на пример, она напишет нестандартный rule-код, который молча выбрасывается.
 
-7. **OCP-H-003 удалена намеренно**. Номерация `001, 002, [003 удалена], 004` сохранена как документация истории.
+7. **`max_tokens_per_run = 3000`** — тестовый лимит. Бюджет проверяется **до** запроса, не после: исчерпание бюджета означает, что оставшиеся кандидаты вообще не попадут к LLM. Порядок обработки — по убыванию `priority`.
 
-8. **`report/` директория** — место хранения `solid_report.log` (JSON-отчёт) и `solid_pipeline.log` (логи выполнения). Дополнительных рендереров (HTML, Markdown) нет — только сырые `.log`-файлы.
+8. **OCP-H-003 удалена намеренно**. Номерация `001, 002, [003 удалена], 004` сохранена как документация истории.
 
-9. **`.env.example`**: `OPENROUTER_API_KEY=your_key_here` — единственная внешняя секрет. `api_key: null` в `solid_config.json` означает: ключ читается исключительно из `.env`/переменной окружения.
+9. **`report/` директория** — место хранения `solid_report.log` (JSON-отчёт) и `solid_pipeline.log` (логи выполнения). Дополнительных рендереров (HTML, Markdown) нет — только сырые `.log`-файлы.
 
-10. **Тесты сосредоточены на `CohesionAdapter`** (10 файлов, глубокое покрытие включая MRO-enrichment и LCOM4 edge-cases), `ImportGraphAdapter` и `ImportLinterAdapter`. Тесты для LLM-слоя и эвристик — директория `tests/llm/` существует, детали не читал.
+10. **`.env.example`**: `OPENROUTER_API_KEY=your_key_here` — единственная внешняя секрет. `api_key: null` в `solid_config.json` означает: ключ читается исключительно из `.env`/переменной окружения.
+
+11. **Тесты сосредоточены на `CohesionAdapter`** (10 файлов, глубокое покрытие включая MRO-enrichment и LCOM4 edge-cases), `ImportGraphAdapter` и `ImportLinterAdapter`. Тесты для LLM-слоя и эвристик — директория `tests/llm/` существует, детали не читал.
 
 ***
