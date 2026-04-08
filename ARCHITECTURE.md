@@ -131,7 +131,7 @@ SOLID Verifier — это **трёхслойный статический ана
 
 #### `pyproject.toml` и `requirements.txt`
 
-Зависимости проекта: `radon`, `lizard`, `grimp`, `import-linter`, `pyan3`, `httpx`, `python-dotenv`, `pydantic`. Для тестов: `pytest`. Проект оформлен как `pyproject.toml`-пакет со стандартной структурой.
+Зависимости проекта: `radon`, `lizard`, `grimp`, `import-linter`, `pyan3`, `httpx`, `python-dotenv`, `pydantic`, `networkx`, `jinja2`. Для тестов: `pytest`. Проект оформлен как `pyproject.toml`-пакет со стандартной структурой.
 
 ***
 
