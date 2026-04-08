@@ -32,9 +32,10 @@ SOLID Verifier — это **трёхслойный статический ана
 | Файл | Статус |
 |---|---|
 | `__main__.py` | ✅ Полный. CLI-точка: argparse, load_dotenv, адаптеры, pipeline, JSON → `report/solid_report.log` |
-| `pipeline.py` | ✅ Полный. Оркестратор: последовательный запуск 6 адаптеров → context → LLM |
+| `pipeline.py` | ✅ Полный. Оркестратор: последовательный запуск 6 адаптеров → `report_aggregator` → LLM. После цикла адаптеров вызывает `aggregate_results(context, config)`, сохраняет результат в `results["aggregated_report"]` и `context["aggregated_report"]`. Сбой агрегатора изолирован (`try/except`): пайплайн продолжает работу. |
+| `report_aggregator.py` | ✅ Новый (Commits B–F). Агрегирует сырые результаты всех 5 статических адаптеров в единый `AggregatedReport`. 9 шагов: нормализация → индексы → кросс-резолюция → денормализация → одиночные события → многоисточниковые события → дедупликация → сводка → сборка. Не зависит от LLM и эвристик. |
 | `config.py` | ✅ Полный. Загрузка JSON, `load_llm_config()`, валидация `layer_order` |
-| `schema.py` | ✅ Изучен. **Важное наблюдение**: содержит Pydantic-схемы `RadonResult`, `CohesionResult`, `PydepsResult` — но `PydepsResult` является **артефактом прошлого** (до рефакторинга, когда был pydeps). Сейчас не используется ни в одном адаптере; `PydepsResult.edges` типизирован через `Dict[str, Any]`, что указывает на незавершённую уборку. |
+| `schema.py` | ✅ Полный. Содержит Pydantic-схемы в двух группах: **адаптерные** (`RadonFunctionMetrics`, `MaintainabilityResult`, `RadonResult`, `CohesionClassMetrics`, `CohesionResult`) и **агрегаторные** (18 новых моделей Commit A: `FileMetrics`, `ClassMetrics`, `FunctionMetrics`, `LayerMetrics`, `ViolationEvent`, `ViolationLocation`, `ViolationMetrics`, `EvidenceItem`, `DeadCodeEntry`, `AggregatedReport`, 5 summary-моделей, `EntitiesSection`, `ReportMeta`). `PydepsResult` — мёртвый артефакт до-рефакторинговой эпохи, не используется. |
 
 #### Адаптеры
 
@@ -191,6 +192,19 @@ SOLID Verifier — это **трёхслойный статический ана
      }
      return {findings_count, candidates_count, ...}  ← JSON-summary
 
+  [агрегация статических результатов — pipeline.py шаг 2а]
+  aggregate_results(context, config)
+  → context["aggregated_report"] = {
+       meta:      {generated_at, adapters_succeeded/failed, lizard_used, config_defaults_used}
+       summary:   {complexity, maintainability, cohesion, imports, dead_code,
+                   violations_total, strong_violations, weak_violations}
+       entities:  {files[], classes[], functions[], layers[]}
+       violations[]: [ViolationEvent{id, type, severity, location, metrics, evidence[], strength}]
+       dead_code[]: [DeadCodeEntry{qualified_name, confidence}]
+     }
+  results["aggregated_report"] = context["aggregated_report"]
+  (сбой: results["aggregated_report"] = {"error": "..."}, пайплайн продолжает работу)
+
   [LLM enabled=True]
   llm_config = load_llm_config(config)  # model=gpt-4o-mini, max_tokens=3000
   adapter = create_llm_adapter(llm_config)  # DI-фабрика
@@ -245,6 +259,12 @@ SOLID Verifier — это **трёхслойный статический ана
 
 10. **`.env.example`**: `OPENROUTER_API_KEY=your_key_here` — единственная внешняя секрет. `api_key: null` в `solid_config.json` означает: ключ читается исключительно из `.env`/переменной окружения.
 
-11. **Тесты сосредоточены на `CohesionAdapter`** (10 файлов, глубокое покрытие включая MRO-enrichment и LCOM4 edge-cases), `ImportGraphAdapter` и `ImportLinterAdapter`. Тесты для LLM-слоя и эвристик — директория `tests/llm/` существует, детали не читал.
+11. **Тесты сосредоточены на `CohesionAdapter`** (10 файлов, глубокое покрытие включая MRO-enrichment и LCOM4 edge-cases), `ImportGraphAdapter` и `ImportLinterAdapter`. Тесты для LLM-слоя и эвристик — директория `tests/llm/` существует, детали не читал. `tests/test_report_aggregator.py` (Commit G) — 9 интеграционных тестов T1–T8 + smoke, включая xfail T7 (киз-цикл Phase 1).
+
+12. **`report_aggregator` конфиг-ключи:** `cohesion_threshold` (деф. 1), `layers`, `utility_layers`, `layer_order`, `package_root`. `CC_THRESHOLD = 10` — модульная константа, зеркальная значению в `radon_adapter.py`; ключа `cc_threshold` в `solid_config.json` нет.
+
+13. **`_is_error_result()` различает сбой адаптера через ключ `"error"`, не через `is_success`.** `ImportLinterAdapter` возвращает `is_success=False` при нарушении контрактов — это нормальное рабочее состояние с заполненным `violation_details`. Сбой любого адаптера всегда содержит `"error"` ключ.
+
+14. **Phase 1 детекция циклов в `_detect_import_cycles()`.** Двунаправленный скан обнаруживает только 2-узловые циклы; циклы ≥ 3 не обнаруживаются (известное ограничение, xfail T7). Phase 2: Tarjan SCC.
 
 ***
