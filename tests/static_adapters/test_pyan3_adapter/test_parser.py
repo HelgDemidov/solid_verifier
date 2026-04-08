@@ -73,11 +73,12 @@ class TestBasicParsing:
 class TestParserFiltering:
 
     def test_self_loop_edge_not_created(self, adapter, tmp_py_project, base_config):
-        # A ссылается сам на себя — self-loop отфильтровывается парсером
+        # self-loop отфильтровывается парсером; sanity check видит nodes>0 + edges=0
+        # и выдаёт RuntimeWarning — это ожидаемый контракт данного сценария
         raw = "A\n  [U] A\n"
-        result = _run_with_output(adapter, tmp_py_project, base_config, raw)
+        with pytest.warns(RuntimeWarning, match="Sanity check"):
+            result = _run_with_output(adapter, tmp_py_project, base_config, raw)
         assert result["edge_count"] == 0
-        # одинокий узел A без рёбер попадает в dead_nodes
         assert "A" in result["dead_nodes"]
 
     def test_non_u_lines_in_block_ignored(self, adapter, tmp_py_project, base_config):
