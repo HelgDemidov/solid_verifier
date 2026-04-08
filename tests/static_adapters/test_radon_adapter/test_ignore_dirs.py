@@ -1,5 +1,6 @@
 # test_ignore_dirs.py — тесты сборки CLI-команды в RadonAdapter.run().
-# Стратегия: subprocess.run патчится через call_args, проверяем cmd, а не результат.
+# Стратегия: subprocess.run патчится через `as mock_run` — call_args читается
+# с самой замены функции (mock_run), а не с объекта-результата (return_value).
 # JSON-вывод минимальный (пустой объект {}) — нам важна только команда.
 import json
 from unittest.mock import patch, MagicMock
@@ -11,8 +12,8 @@ _PATCH_LIZARD = "solid_dashboard.adapters.radon_adapter.LIZARD_AVAILABLE"
 _EMPTY_OUTPUT = json.dumps({})
 
 
-def _make_mock(stdout: str = _EMPTY_OUTPUT) -> MagicMock:
-    # имитируем успешный subprocess.CompletedProcess
+def _make_proc_mock(stdout: str = _EMPTY_OUTPUT) -> MagicMock:
+    # имитирует возвращаемый subprocess.CompletedProcess — объект-результат
     m = MagicMock()
     m.stdout = stdout
     m.returncode = 0
@@ -20,7 +21,8 @@ def _make_mock(stdout: str = _EMPTY_OUTPUT) -> MagicMock:
 
 
 def _get_cmd(mock_run: MagicMock) -> list:
-    # извлекаем первый позиционный аргумент (cmd) из call_args
+    # mock_run — замена subprocess.run (объект-функция, не результат)
+    # call_args.args[0] — первый позиционный аргумент вызова: cmd
     return mock_run.call_args.args[0]
 
 
@@ -31,12 +33,11 @@ class TestIgnoreDirsCmdConstruction:
         self, adapter, tmp_py_project, base_config
     ):
         # пустой ignore_dirs — флаг -i не должен появляться в команде
-        mock = _make_mock()
-        with patch(_PATCH_SUBPROCESS, return_value=mock), \
+        with patch(_PATCH_SUBPROCESS, return_value=_make_proc_mock()) as mock_run, \
              patch(_PATCH_LIZARD, False):
             adapter.run(target_dir=str(tmp_py_project), context={}, config=base_config)
 
-        cmd = _get_cmd(mock)
+        cmd = _get_cmd(mock_run)
         assert "-i" not in cmd
 
     def test_single_ignore_dir_produces_flag(
@@ -44,12 +45,11 @@ class TestIgnoreDirsCmdConstruction:
     ):
         # один ignore_dir — cmd содержит "-i" и его значение
         config = {"ignore_dirs": ["tests"]}
-        mock = _make_mock()
-        with patch(_PATCH_SUBPROCESS, return_value=mock), \
+        with patch(_PATCH_SUBPROCESS, return_value=_make_proc_mock()) as mock_run, \
              patch(_PATCH_LIZARD, False):
             adapter.run(target_dir=str(tmp_py_project), context={}, config=config)
 
-        cmd = _get_cmd(mock)
+        cmd = _get_cmd(mock_run)
         assert "-i" in cmd
         assert cmd[cmd.index("-i") + 1] == "tests"
 
@@ -58,12 +58,11 @@ class TestIgnoreDirsCmdConstruction:
     ):
         # несколько ignore_dirs — значение должно быть соединено через запятую
         config = {"ignore_dirs": ["tests", ".venv", "migrations"]}
-        mock = _make_mock()
-        with patch(_PATCH_SUBPROCESS, return_value=mock), \
+        with patch(_PATCH_SUBPROCESS, return_value=_make_proc_mock()) as mock_run, \
              patch(_PATCH_LIZARD, False):
             adapter.run(target_dir=str(tmp_py_project), context={}, config=config)
 
-        cmd = _get_cmd(mock)
+        cmd = _get_cmd(mock_run)
         assert "-i" in cmd
         assert cmd[cmd.index("-i") + 1] == "tests,.venv,migrations"
 
@@ -72,12 +71,11 @@ class TestIgnoreDirsCmdConstruction:
     ):
         # пустые строки и пробелы фильтруются, остается только "tests"
         config = {"ignore_dirs": ["tests", "", "  "]}
-        mock = _make_mock()
-        with patch(_PATCH_SUBPROCESS, return_value=mock), \
+        with patch(_PATCH_SUBPROCESS, return_value=_make_proc_mock()) as mock_run, \
              patch(_PATCH_LIZARD, False):
             adapter.run(target_dir=str(tmp_py_project), context={}, config=config)
 
-        cmd = _get_cmd(mock)
+        cmd = _get_cmd(mock_run)
         assert "-i" in cmd
         assert cmd[cmd.index("-i") + 1] == "tests"
 
@@ -85,12 +83,11 @@ class TestIgnoreDirsCmdConstruction:
         self, adapter, tmp_py_project, base_config
     ):
         # target_dir должен всегда присутствовать в команде
-        mock = _make_mock()
-        with patch(_PATCH_SUBPROCESS, return_value=mock), \
+        with patch(_PATCH_SUBPROCESS, return_value=_make_proc_mock()) as mock_run, \
              patch(_PATCH_LIZARD, False):
             adapter.run(
                 target_dir=str(tmp_py_project), context={}, config=base_config
             )
 
-        cmd = _get_cmd(mock)
+        cmd = _get_cmd(mock_run)
         assert str(tmp_py_project) in cmd
