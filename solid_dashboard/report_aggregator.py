@@ -9,8 +9,8 @@
 #   Commit B — Шаги 1–2: нормализация + построение индексов
 #   Commit C — Шаги 3–4: кросс-резолюция и денормализация метрик
 #   Commit D — Шаг 5:    одиночные события нарушений
-#   Commit E — Шаг 6:    многоисточниковые события (текущий файл)
-#   Commit F — Шаги 7–9: дедупликация, сводка, финальная сборка
+#   Commit E — Шаг 6:    многоисточниковые события
+#   Commit F — Шаги 7–9: дедупликация, сводка, финальная сборка (текущий файл)
 # ===================================================================================================
 
 from collections import defaultdict
@@ -21,12 +21,17 @@ from solid_dashboard.schema import (
     AggregatedReport,
     AggregatedSummary,
     ClassMetrics,
+    CohesionSummary,
+    ComplexitySummary,
     DeadCodeEntry,
+    DeadCodeSummary,
     EntitiesSection,
     EvidenceItem,
     FileMetrics,
     FunctionMetrics,
+    ImportsSummary,
     LayerMetrics,
+    MaintainabilitySummary,
     ReportMeta,
     ViolationEvent,
     ViolationLocation,
@@ -44,7 +49,7 @@ _SEVERITY_RANK: Dict[str, int] = {"error": 2, "warning": 1, "info": 0}
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Public entry point — fully wired (Steps 1–9)
 # ---------------------------------------------------------------------------
 
 def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -83,7 +88,7 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     lizard_used: bool = bool(
         isinstance(context.get("radon"), dict) and context["radon"].get("lizard_used", False))
 
-    # Step 2 — build indexes
+    # Step 2 — indexes
     file_index: Dict[str, FileMetrics] = _build_file_index(radon_fns, mi_files, cohesion_classes)
     class_index: Dict[str, ClassMetrics] = _build_class_index(cohesion_classes)
     fn_index: Dict[str, FunctionMetrics] = _build_function_index(radon_fns)
@@ -110,13 +115,28 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     overloaded_events = _emit_overloaded_class_events(
         class_index, fn_to_class, fn_index, CC_THRESHOLD, lcom4_threshold)
 
-    all_violations: List[ViolationEvent] = (
+    raw_violations: List[ViolationEvent] = (
         cc_events + mi_events + cohesion_events + dead_events
         + cycle_events + layer_events + overloaded_events
-        # deduplication + summary in Commit F
     )
 
-    # Steps 7–9 in Commit F
+    # Step 7 — deduplicate and sort
+    all_violations: List[ViolationEvent] = _deduplicate_violations(raw_violations)
+
+    # Step 8 — compute summary
+    summary = _compute_summary(
+        fn_index=fn_index,
+        file_index=file_index,
+        class_index=class_index,
+        layer_index=layer_index,
+        violations=all_violations,
+        dead_entries=dead_entries,
+        lcom4_threshold=lcom4_threshold,
+        linter_raw=context.get("import_linter") if isinstance(context.get("import_linter"), dict) else {},
+        pyan3_raw=context.get("pyan3") if isinstance(context.get("pyan3"), dict) else {},
+    )
+
+    # Step 9 — assemble final report
     meta = ReportMeta(
         generated_at=datetime.now(tz=timezone.utc).isoformat(),
         adapter_versions_available=list(_ADAPTER_KEYS),
@@ -133,10 +153,10 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     )
     report = AggregatedReport(
         meta=meta,
-        summary=AggregatedSummary(),  # populated in Commit F
+        summary=summary,
         entities=entities,
         violations=all_violations,
-        dead_code=dead_entries,
+        dead_code=sorted(dead_entries, key=lambda e: e.qualified_name),
     )
     return report.model_dump()
 
@@ -327,7 +347,8 @@ def _build_module_to_layer_map(config):
     result: Dict[str, str] = {}
     for sec in ("layers", "utility_layers"):
         for ln, rv in (config.get(sec) or {}).items():
-            paths = [rv] if isinstance(rv, str) else ([p for p in rv if isinstance(p, str)] if isinstance(rv, list) else [])
+            paths = [rv] if isinstance(rv, str) else (
+                [p for p in rv if isinstance(p, str)] if isinstance(rv, list) else [])
             for p in paths:
                 p = p.strip()
                 if not p:
@@ -414,7 +435,8 @@ def _emit_mi_events(files):
             severity="error" if f.mi_rank == "C" else "warning",
             location=ViolationLocation(filepath=f.filepath),
             metrics=ViolationMetrics(mi=f.mi, rank=f.mi_rank),
-            evidence=[EvidenceItem(source="radon", details={"mi": f.mi, "rank": f.mi_rank, "filepath": f.filepath})],
+            evidence=[EvidenceItem(source="radon",
+                details={"mi": f.mi, "rank": f.mi_rank, "filepath": f.filepath})],
             strength="weak",
         ))
     return events
@@ -490,79 +512,42 @@ def _detect_import_cycles(edges):
 # Step 6: multi-source merged events
 # ---------------------------------------------------------------------------
 
-def _merge_layer_violations(
-    graph_violations: List[Dict[str, Any]],
-    contract_violations: List[Dict[str, Any]],
-    layer_index: Dict[str, LayerMetrics],
-    module_to_layer_map: Dict[str, str],
-) -> List[ViolationEvent]:
+def _merge_layer_violations(graph_violations, contract_violations, layer_index, module_to_layer_map):
     """
-    Merges ImportGraph SDP/SLP violations with ImportLinter contract violations.
-
-    Dedup key: (from_layer, to_layer)
-
-    Rules (SOLID_audit.md §3.3 Rule D1):
-      Both ImportLinter + ImportGraph fire on same key  -> LAYER_VIOLATION, strength="strong", 2 evidence entries
-      Only ImportLinter fires                           -> LAYER_VIOLATION, strength="weak"
-      Only ImportGraph SDP-001 fires                   -> SDP_VIOLATION,   strength="weak"
-      Only ImportGraph SLP-001 fires                   -> SLP_VIOLATION,   strength="weak"
-
-    Also updates LayerMetrics counters in layer_index (sdp_violation_count,
-    slp_violation_count, linter_broken_imports) for use in summary (Commit F).
+    Merges ImportGraph + ImportLinter violations per (from_layer, to_layer) key.
+    Updates LayerMetrics counters for _compute_summary.
+    See SOLID_audit.md §3.3 Rule D1 for full merge semantics.
     """
-    # Bucket: (from_layer, to_layer) -> {linter_evidence, graph_evidence, graph_rule, graph_severity}
     linter_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
     graph_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
-    # --- Collect ImportLinter evidence ---
     for contract in contract_violations:
         contract_name = contract.get("contract_name", "")
-        broken_imports: List[Dict[str, str]] = contract.get("broken_imports", [])
-
-        for imp in broken_imports:
-            importer = imp.get("importer", "")
-            imported = imp.get("imported", "")
+        for imp in contract.get("broken_imports", []):
+            importer, imported = imp.get("importer", ""), imp.get("imported", "")
             from_layer = _resolve_module_to_layer(importer, module_to_layer_map)
             to_layer = _resolve_module_to_layer(imported, module_to_layer_map)
-
             if not from_layer or not to_layer or from_layer == to_layer:
                 continue
-
             key = (from_layer, to_layer)
             if key not in linter_bucket:
-                linter_bucket[key] = {
-                    "contract_name": contract_name,
-                    "broken_imports": [],
-                }
+                linter_bucket[key] = {"contract_name": contract_name, "broken_imports": []}
             linter_bucket[key]["broken_imports"].append({"importer": importer, "imported": imported})
-
-            # Update LayerMetrics counter
             if from_layer in layer_index:
                 layer_index[from_layer].linter_broken_imports += 1
 
-    # --- Collect ImportGraph evidence ---
     for v in graph_violations:
         rule = v.get("rule", "")
-        from_layer = v.get("layer", "")
-        to_layer = v.get("dependency", "")
+        from_layer, to_layer = v.get("layer", ""), v.get("dependency", "")
         if not from_layer or not to_layer:
             continue
-
         key = (from_layer, to_layer)
-        # Keep the most severe graph evidence per key (SDP-001 > SLP-001)
-        existing = graph_bucket.get(key)
-        if existing is None or rule == "SDP-001":
+        if key not in graph_bucket or rule == "SDP-001":
             graph_bucket[key] = {
-                "rule": rule,
-                "severity": v.get("severity", "error"),
-                "instability": v.get("instability"),
-                "dep_instability": v.get("dep_instability"),
-                "skip_distance": v.get("skip_distance"),
-                "tier": v.get("tier"),
-                "dep_tier": v.get("dep_tier"),
+                "rule": rule, "severity": v.get("severity", "error"),
+                "instability": v.get("instability"), "dep_instability": v.get("dep_instability"),
+                "skip_distance": v.get("skip_distance"), "tier": v.get("tier"), "dep_tier": v.get("dep_tier"),
             }
-
-        # Update LayerMetrics counters
         if from_layer in layer_index:
             lm = layer_index[from_layer]
             if rule == "SDP-001":
@@ -570,149 +555,225 @@ def _merge_layer_violations(
             elif rule == "SLP-001":
                 lm.slp_violation_count += 1
 
-    # --- Merge into ViolationEvents ---
     events: List[ViolationEvent] = []
-    all_keys: Set[Tuple[str, str]] = set(linter_bucket) | set(graph_bucket)
-
-    for key in sorted(all_keys):
+    for key in sorted(set(linter_bucket) | set(graph_bucket)):
         from_layer, to_layer = key
         linter_ev = linter_bucket.get(key)
         graph_ev = graph_bucket.get(key)
 
         evidence: List[EvidenceItem] = []
         if linter_ev:
-            evidence.append(EvidenceItem(
-                source="import_linter",
-                details={
-                    "contract_name": linter_ev["contract_name"],
-                    "broken_imports_count": len(linter_ev["broken_imports"]),
-                    "broken_imports": linter_ev["broken_imports"],
-                },
-            ))
+            evidence.append(EvidenceItem(source="import_linter", details={
+                "contract_name": linter_ev["contract_name"],
+                "broken_imports_count": len(linter_ev["broken_imports"]),
+                "broken_imports": linter_ev["broken_imports"],
+            }))
         if graph_ev:
-            evidence.append(EvidenceItem(
-                source="import_graph",
-                details={k: v for k, v in graph_ev.items() if v is not None},
-            ))
+            evidence.append(EvidenceItem(source="import_graph",
+                details={k: v for k, v in graph_ev.items() if v is not None}))
 
-        both_fired = linter_ev is not None and graph_ev is not None
-        strength = "strong" if both_fired else "weak"
-
-        # Determine event type and severity
+        both = linter_ev is not None and graph_ev is not None
         if linter_ev is not None:
             event_type = "LAYER_VIOLATION"
-            # Severity: max of linter (always "error" for BROKEN) and graph severity
             graph_sev = graph_ev["severity"] if graph_ev else "error"
             severity = "error" if _SEVERITY_RANK.get(graph_sev, 0) >= _SEVERITY_RANK["warning"] else "warning"
         elif graph_ev is not None:
-            rule = graph_ev["rule"]
-            event_type = "SDP_VIOLATION" if rule == "SDP-001" else "SLP_VIOLATION"
+            event_type = "SDP_VIOLATION" if graph_ev["rule"] == "SDP-001" else "SLP_VIOLATION"
             severity = graph_ev["severity"]
         else:
-            continue  # should not happen
+            continue
 
         events.append(ViolationEvent(
             id=_make_event_id(event_type, from_layer, to_layer),
-            type=event_type,
-            severity=severity,
+            type=event_type, severity=severity,
             location=ViolationLocation(from_layer=from_layer, to_layer=to_layer),
             metrics=ViolationMetrics(
                 instability=graph_ev.get("instability") if graph_ev else None,
                 dep_instability=graph_ev.get("dep_instability") if graph_ev else None,
                 skip_distance=graph_ev.get("skip_distance") if graph_ev else None,
             ),
-            evidence=evidence,
-            strength=strength,
+            evidence=evidence, strength="strong" if both else "weak",
         ))
-
     return events
 
 
-def _emit_overloaded_class_events(
-    class_index: Dict[str, ClassMetrics],
-    fn_to_class: Dict[str, str],
-    fn_index: Dict[str, FunctionMetrics],
-    cc_threshold: int,
-    lcom4_threshold: int,
-) -> List[ViolationEvent]:
+def _emit_overloaded_class_events(class_index, fn_to_class, fn_index, cc_threshold, lcom4_threshold):
     """
-    Emits OVERLOADED_CLASS events for classes that simultaneously have:
-      - LCOM4 > lcom4_threshold  (low cohesion signal from CohesionAdapter)
-      - At least one method with CC > cc_threshold  (high complexity from RadonAdapter)
-
-    Joining via fn_to_class map built in Step 3 (lineno-range matching).
-    Both evidence entries present -> strength="strong".
-
-    Severity:
-      LCOM4 >= 3 AND max_cc > 15  -> "error"
-      otherwise                   -> "warning"
+    OVERLOADED_CLASS: Cohesion lcom4>threshold AND any method CC>threshold.
+    strength=strong (both adapters). See SOLID_audit.md §3.3 Rule D2.
     """
-    # Build method CC lookup per class
     methods_by_class: Dict[str, List[FunctionMetrics]] = defaultdict(list)
-    for fn_id, class_id in fn_to_class.items():
+    for fn_id, cid in fn_to_class.items():
         fn = fn_index.get(fn_id)
-        if fn is not None:
-            methods_by_class[class_id].append(fn)
+        if fn:
+            methods_by_class[cid].append(fn)
 
-    events: List[ViolationEvent] = []
-
-    for class_id, cls in class_index.items():
-        # Must be a low-cohesion concrete class
-        if cls.excluded_from_aggregation:
+    events = []
+    for cid, cls in class_index.items():
+        if cls.excluded_from_aggregation or cls.lcom4 is None or cls.lcom4 <= lcom4_threshold:
             continue
-        if cls.lcom4 is None or cls.lcom4 <= lcom4_threshold:
+        high_cc = [m for m in methods_by_class.get(cid, []) if m.cc > cc_threshold]
+        if not high_cc:
             continue
-
-        # Must have at least one high-CC method
-        class_methods = methods_by_class.get(class_id, [])
-        high_cc_methods = [m for m in class_methods if m.cc > cc_threshold]
-        if not high_cc_methods:
-            continue
-
-        max_cc_method = max(high_cc_methods, key=lambda m: m.cc)
-        max_cc = max_cc_method.cc
-
-        severity = (
-            "error"
-            if cls.lcom4 >= 3 and max_cc > 15
-            else "warning"
-        )
-
+        top = max(high_cc, key=lambda m: m.cc)
         events.append(ViolationEvent(
             id=_make_event_id("OVERLOADED_CLASS", cls.filepath, cls.class_name),
             type="OVERLOADED_CLASS",
-            severity=severity,
-            location=ViolationLocation(
-                filepath=cls.filepath,
-                lineno=cls.lineno,
-                class_name=cls.class_name,
-            ),
-            metrics=ViolationMetrics(
-                lcom4=cls.lcom4,
-                cc=max_cc,
-            ),
+            severity="error" if cls.lcom4 >= 3 and top.cc > 15 else "warning",
+            location=ViolationLocation(filepath=cls.filepath, lineno=cls.lineno, class_name=cls.class_name),
+            metrics=ViolationMetrics(lcom4=cls.lcom4, cc=top.cc),
             evidence=[
-                EvidenceItem(
-                    source="cohesion",
-                    details={
-                        "cohesion_score": cls.lcom4,
-                        "cohesion_score_norm": cls.lcom4_norm,
-                        "methods_count": cls.methods_count,
-                        "class_kind": cls.class_kind,
-                    },
-                ),
-                EvidenceItem(
-                    source="radon",
-                    details={
-                        "max_cc_method_name": max_cc_method.name,
-                        "max_complexity": max_cc,
-                        "max_cc_method_lineno": max_cc_method.lineno,
-                        "mean_cc_in_class": cls.mean_method_cc,
-                        "high_cc_methods_count": len(high_cc_methods),
-                    },
-                ),
+                EvidenceItem(source="cohesion", details={
+                    "cohesion_score": cls.lcom4, "cohesion_score_norm": cls.lcom4_norm,
+                    "methods_count": cls.methods_count, "class_kind": cls.class_kind,
+                }),
+                EvidenceItem(source="radon", details={
+                    "max_cc_method_name": top.name, "max_complexity": top.cc,
+                    "max_cc_method_lineno": top.lineno, "mean_cc_in_class": cls.mean_method_cc,
+                    "high_cc_methods_count": len(high_cc),
+                }),
             ],
             strength="strong",
         ))
-
     return events
+
+
+# ---------------------------------------------------------------------------
+# Step 7: deduplication and sorting
+# ---------------------------------------------------------------------------
+
+def _deduplicate_violations(violations: List[ViolationEvent]) -> List[ViolationEvent]:
+    """
+    Deduplicates ViolationEvent list by event id.
+
+    If two paths produce the same id (same type + same location key):
+      - Evidence lists are merged (union by source)
+      - Severity is set to the maximum of both
+      - strength is set to "strong" if merged evidence has >=2 distinct sources
+
+    Final list is sorted: severity DESC (error > warning > info), then type ASC.
+    """
+    merged: Dict[str, ViolationEvent] = {}
+
+    for event in violations:
+        existing = merged.get(event.id)
+        if existing is None:
+            merged[event.id] = event
+        else:
+            # Merge evidence: add entries with sources not already present
+            existing_sources = {e.source for e in existing.evidence}
+            for ev in event.evidence:
+                if ev.source not in existing_sources:
+                    existing.evidence.append(ev)
+                    existing_sources.add(ev.source)
+
+            # Upgrade severity to max
+            if _SEVERITY_RANK.get(event.severity, 0) > _SEVERITY_RANK.get(existing.severity, 0):
+                existing.severity = event.severity
+
+            # Upgrade strength if now multi-source
+            if len(existing.evidence) >= 2:
+                existing.strength = "strong"
+
+    return sorted(
+        merged.values(),
+        key=lambda e: (-_SEVERITY_RANK.get(e.severity, 0), e.type),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 8: summary computation
+# ---------------------------------------------------------------------------
+
+def _compute_summary(
+    fn_index: Dict[str, FunctionMetrics],
+    file_index: Dict[str, FileMetrics],
+    class_index: Dict[str, ClassMetrics],
+    layer_index: Dict[str, LayerMetrics],
+    violations: List[ViolationEvent],
+    dead_entries: List[DeadCodeEntry],
+    lcom4_threshold: int,
+    linter_raw: Dict[str, Any],
+    pyan3_raw: Dict[str, Any],
+) -> AggregatedSummary:
+    """
+    Computes all summary sub-sections from entity indexes and violation list.
+    linter_raw and pyan3_raw are used for adapter-level aggregates not captured in entities.
+    """
+    # --- Complexity ---
+    all_cc = [fn.cc for fn in fn_index.values()]
+    rank_dist_cc: Dict[str, int] = defaultdict(int)
+    for fn in fn_index.values():
+        rank_dist_cc[fn.rank] += 1
+    complexity = ComplexitySummary(
+        total_items=len(all_cc),
+        mean_cc=round(sum(all_cc) / len(all_cc), 2) if all_cc else 0.0,
+        high_complexity_count=sum(1 for cc in all_cc if cc > CC_THRESHOLD),
+        rank_distribution=dict(rank_dist_cc),
+    )
+
+    # --- Maintainability ---
+    mi_files = [f for f in file_index.values() if f.mi is not None]
+    rank_dist_mi: Dict[str, int] = defaultdict(int)
+    for f in mi_files:
+        if f.mi_rank:
+            rank_dist_mi[f.mi_rank] += 1
+    maintainability = MaintainabilitySummary(
+        total_files=len(mi_files),
+        mean_mi=round(sum(f.mi for f in mi_files) / len(mi_files), 2) if mi_files else 0.0,
+        low_mi_count=sum(1 for f in mi_files if f.mi_rank == "C"),
+        rank_distribution=dict(rank_dist_mi),
+    )
+
+    # --- Cohesion ---
+    concrete = [c for c in class_index.values() if not c.excluded_from_aggregation]
+    concrete_with_lcom4 = [c for c in concrete if c.lcom4 is not None]
+    multi_method = [c for c in concrete_with_lcom4 if c.methods_count >= 2]
+    cohesion = CohesionSummary(
+        total_classes_analyzed=len(class_index),
+        concrete_classes_count=len(concrete),
+        mean_lcom4_all=round(
+            sum(c.lcom4 for c in concrete_with_lcom4) / len(concrete_with_lcom4), 2
+        ) if concrete_with_lcom4 else 0.0,
+        mean_lcom4_multi_method=round(
+            sum(c.lcom4 for c in multi_method) / len(multi_method), 2
+        ) if multi_method else 0.0,
+        low_cohesion_count=sum(
+            1 for c in concrete_with_lcom4 if c.lcom4 > lcom4_threshold
+        ),
+        low_cohesion_threshold=lcom4_threshold,
+    )
+
+    # --- Imports ---
+    sdp_count = sum(lm.sdp_violation_count for lm in layer_index.values())
+    slp_count = sum(lm.slp_violation_count for lm in layer_index.values())
+    cycle_count = sum(1 for v in violations if v.type == "IMPORT_CYCLE")
+    imports = ImportsSummary(
+        contracts_checked=int(linter_raw.get("contracts_checked", 0)),
+        broken_contracts=int(linter_raw.get("broken_contracts", 0)),
+        sdp_violations=sdp_count,
+        slp_violations=slp_count,
+        import_cycles=cycle_count,
+    )
+
+    # --- Dead code ---
+    dead_code_summary = DeadCodeSummary(
+        dead_node_count=len(dead_entries),
+        high_confidence_dead=sum(1 for e in dead_entries if e.confidence == "high"),
+        collision_rate=float(pyan3_raw.get("collision_rate", 0.0)),
+    )
+
+    # --- Violation counts ---
+    strong_count = sum(1 for v in violations if v.strength == "strong")
+    weak_count = len(violations) - strong_count
+
+    return AggregatedSummary(
+        complexity=complexity,
+        maintainability=maintainability,
+        cohesion=cohesion,
+        imports=imports,
+        dead_code=dead_code_summary,
+        violations_total=len(violations),
+        strong_violations=strong_count,
+        weak_violations=weak_count,
+    )
