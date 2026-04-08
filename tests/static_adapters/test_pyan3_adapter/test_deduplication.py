@@ -2,9 +2,9 @@
 #
 # Контракт дедупликации:
 #   1. Дублирующиеся рёбра (одинаковые from+to) схлопываются в одно.
-#   2. Правило разрешения конфликта confidence: если хотя бы одно из
-#      дублирующихся рёбер имеет confidence="high", результирующее ребро
-#      получает confidence="high" (оптимистичная стратегия).
+#   2. Правило разрешения конфликта confidence: пессимистичная стратегия —
+#      если хотя бы одно из дублирующихся рёбер имеет confidence="low",
+#      результирующее ребро получает confidence="low" ("low" заражает "high").
 #   3. Счётчики edge_count, edge_count_high, edge_count_low отражают
 #      состояние ПОСЛЕ дедупликации.
 #   4. Порядок рёбер в финальном списке не специфицирован — тесты
@@ -58,9 +58,17 @@ class TestEdgeDeduplication:
         assert result["edge_count_high"] == 0
         assert result["edge_count_low"] == 1
 
-    def test_conflict_high_wins_over_low(self, adapter, tmp_py_project, base_config):
+    def test_conflict_low_wins_over_high(self, adapter, tmp_py_project, base_config):
         # одно ребро A→B из чистого блока (high) + одно из suspicious (low):
-        # оптимистичная стратегия — результат high
+        # пессимистичная стратегия — "low" заражает "high", результат low.
+        #
+        # Обоснование: pyan3 объединяет несколько сущностей с одинаковым коротким
+        # именем в один text-блок (name collision). Если хотя бы одно вхождение
+        # ребра A→B пришло из suspicious-блока, значит часть вхождений — ложные
+        # (cross-attribution). Повышать уверенность до "high" на основании
+        # другого вхождения семантически неверно.
+        # Реализация: pyan3_adapter.py, функция run(), блок "Де-дупликация рёбер",
+        # условие: if current_conf is None or (e["confidence"] == "low" and current_conf == "high").
         raw = (
             make_raw_output([("A", "B")]) +                              # high
             make_raw_output([("A", "B")], extra_used={"A": ["B"]})      # low
@@ -68,9 +76,9 @@ class TestEdgeDeduplication:
         result = _run_with_output(adapter, tmp_py_project, base_config, raw)
         assert_success_schema(result)
         assert result["edge_count"] == 1
-        assert_edge(result["edges"], "A", "B", "high")
-        assert result["edge_count_high"] == 1
-        assert result["edge_count_low"] == 0
+        assert_edge(result["edges"], "A", "B", "low")
+        assert result["edge_count_high"] == 0
+        assert result["edge_count_low"] == 1
 
     def test_non_duplicate_edges_preserved(self, adapter, tmp_py_project, base_config):
         # A→B и A→C — разные рёбра, дедупликация не должна их трогать
@@ -83,7 +91,8 @@ class TestEdgeDeduplication:
 
     def test_counters_reflect_post_deduplication_state(self, adapter, tmp_py_project, base_config):
         # 3 вхождения A→B (2 high + 1 low) + 1 уникальное A→C (high):
-        # после дедупликации: A→B high, A→C high → edge_count=2, high=2, low=0
+        # пессимистичная стратегия: A→B low (low заразил high), A→C high
+        # → edge_count=2, high=1, low=1
         raw = (
             make_raw_output([("A", "B")]) +                              # high
             make_raw_output([("A", "B")], extra_used={"A": ["B"]}) +    # low
@@ -93,6 +102,6 @@ class TestEdgeDeduplication:
         result = _run_with_output(adapter, tmp_py_project, base_config, raw)
         assert_success_schema(result)
         assert result["edge_count"] == 2
-        assert result["edge_count_high"] == 2
-        assert result["edge_count_low"] == 0
+        assert result["edge_count_high"] == 1
+        assert result["edge_count_low"] == 1
         assert result["edge_count_high"] + result["edge_count_low"] == result["edge_count"]
