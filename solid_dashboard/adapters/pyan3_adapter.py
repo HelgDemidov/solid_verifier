@@ -17,6 +17,10 @@
 #    - "low"  — ребро ненадежное по одному из двух признаков:
 #               (a) блок-источник содержит кратные [U]-вхождения (name collision в источнике)
 #               (b) цель является suspicious-узлом (cascaded propagation)
+# 6. Защита от высокого collision rate (нестандартные репозитории без __init__.py):
+#    - Шаг 2: предупреждение до запуска pyan3, если target_dir не является Python-пакетом
+#    - Шаг 1/3: вычисление collision_rate и предупреждение при превышении порога из конфига
+#    - Шаг 4: опциональный abort (abort_on_high_collision) при критически высоком rate
 # ===================================================================================================
 
 from __future__ import annotations
@@ -35,6 +39,10 @@ _VALID_PY_NAME = re.compile(r'^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$')
 # Префиксы строк, которые Pyan3 может выводить в stdout как диагностику
 _PYAN3_DIAG_PREFIXES = ("WARNING:", "ERROR:", "INFO:", "CRITICAL:")
 
+# Дефолтные значения для секции pyan3 в конфиге
+_DEFAULT_COLLISION_THRESHOLD = 0.35
+_DEFAULT_ABORT_ON_HIGH_COLLISION = False
+
 
 class Pyan3Adapter(IAnalyzer):
     # Адаптер для pyan3: строит граф вызовов на уровне функций/методов
@@ -51,9 +59,31 @@ class Pyan3Adapter(IAnalyzer):
         project_root = os.path.dirname(os.path.abspath(target_dir))
         appdir = os.path.abspath(target_dir)
 
+        # Читаем настройки collision-guard из секции pyan3 конфига (с дефолтами)
+        pyan3_cfg = config.get("pyan3") or {}
+        collision_threshold: float = float(
+            pyan3_cfg.get("collision_rate_threshold", _DEFAULT_COLLISION_THRESHOLD)
+        )
+        abort_on_high_collision: bool = bool(
+            pyan3_cfg.get("abort_on_high_collision", _DEFAULT_ABORT_ON_HIGH_COLLISION)
+        )
+
         # 1. Извлекаем ignore_dirs
         ignore_dirs_cfg = config.get("ignore_dirs") or []
         ignore_dirs = [d.strip() for d in ignore_dirs_cfg if d and d.strip()]
+
+        # Шаг 2: ранняя проверка — является ли target_dir корнем Python-пакета
+        # Отсутствие __init__.py означает, что pyan3 будет использовать короткие
+        # (неквалифицированные) имена узлов, что резко повышает вероятность коллизий
+        if not os.path.exists(os.path.join(appdir, "__init__.py")):
+            warnings.warn(
+                f"Pyan3Adapter: target_dir '{appdir}' has no __init__.py. "
+                "Pyan3 will likely use short (unqualified) node names, "
+                "increasing name collision risk. "
+                "Consider using a properly packaged Python project as target.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         # 2. Безопасно собираем список python-файлов обходя ignore_dirs
         py_files = []
@@ -223,6 +253,32 @@ class Pyan3Adapter(IAnalyzer):
 
         node_list = sorted(list(nodes))
 
+        # Шаги 1, 3, 4: вычисляем collision_rate и применяем защитные меры
+        total_nodes = len(node_list)
+        collision_rate: float = (
+            len(suspicious_blocks) / total_nodes if total_nodes > 0 else 0.0
+        )
+
+        if collision_rate > collision_threshold:
+            warn_msg = (
+                f"Pyan3Adapter: high collision rate detected — "
+                f"{collision_rate:.0%} ({len(suspicious_blocks)}/{total_nodes} nodes suspicious). "
+                f"Threshold: {collision_threshold:.0%}. "
+                "Target project may lack proper __init__.py structure. "
+                "Many edges are marked low-confidence and may be unreliable."
+            )
+            warnings.warn(warn_msg, RuntimeWarning, stacklevel=2)
+
+            # Шаг 4: при abort_on_high_collision=true возвращаем ошибку вместо ненадежных данных
+            if abort_on_high_collision:
+                return self._error(
+                    f"Aborted: collision_rate {collision_rate:.0%} exceeds threshold "
+                    f"{collision_threshold:.0%} and abort_on_high_collision is enabled. "
+                    "Set abort_on_high_collision=false in solid_config.json to receive "
+                    "low-confidence results instead.",
+                    raw_output=raw_output,
+                )
+
         return {
             "is_success": True,
             "node_count": len(node_list),
@@ -236,6 +292,8 @@ class Pyan3Adapter(IAnalyzer):
             "root_node_count": len(root_nodes),
             "root_nodes": root_nodes,
             "suspicious_blocks": sorted(suspicious_blocks),
+            # Шаг 1: collision_rate для downstream-потребителей (LLM-слой, отчет)
+            "collision_rate": round(collision_rate, 4),
             "raw_output": raw_output,
         }
 
@@ -256,6 +314,7 @@ class Pyan3Adapter(IAnalyzer):
             "root_node_count": 0,
             "root_nodes": [],
             "suspicious_blocks": [],
+            "collision_rate": 0.0,
             "raw_output": raw_output,
         }
 
