@@ -6,8 +6,8 @@
 # Выходные данные: AggregatedReport-совместимый dict (валидируется через schema.AggregatedReport).
 #
 # Этапы реализации:
-#   Commit B — Шаги 1–2: нормализация + построение индексов (текущий файл)
-#   Commit C — Шаги 3–4: кросс-резолюция и денормализация метрик
+#   Commit B — Шаги 1–2: нормализация + построение индексов
+#   Commit C — Шаги 3–4: кросс-резолюция и денормализация метрик (текущий файл)
 #   Commit D — Шаг 5:    одиночные события нарушений
 #   Commit E — Шаг 6:    многоисточниковые события (LAYER_VIOLATION, OVERLOADED_CLASS)
 #   Commit F — Шаги 7–9: дедупликация, сводка, финальная сборка
@@ -15,7 +15,7 @@
 
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from solid_dashboard.schema import (
     AggregatedReport,
@@ -62,6 +62,8 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
           config.get("cohesion_threshold", 1)  -> lcom4_threshold (int)
           config.get("layers", {})             -> layer prefix map for module->layer resolution
           config.get("utility_layers", {})     -> crosscutting layer names (no tier)
+          config.get("layer_order", [])        -> tier ordering for LayerMetrics.tier
+          config.get("package_root", "")       -> package name for prefix normalization
         Note: CC threshold (10) is a module constant (CC_THRESHOLD), not read from config.
 
     Returns
@@ -78,12 +80,8 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
 
     # -----------------------------------------------------------------------
     # Step 1 — Guard and normalize raw adapter outputs
-    # Extract thresholds from config (with defaults matching adapter defaults)
     # -----------------------------------------------------------------------
-    # CC_THRESHOLD = 10 (module constant — hardcoded in RadonAdapter, NOT configurable)
-    lcom4_threshold: int = int(config.get("cohesion_threshold", 1))  # cohesion_adapter.py key
-    layer_config: Dict[str, Any] = config.get("layers", {})
-    utility_layers: Dict[str, Any] = config.get("utility_layers", {})
+    lcom4_threshold: int = int(config.get("cohesion_threshold", 1))
 
     adapters_succeeded: List[str] = []
     adapters_failed: List[str] = []
@@ -131,14 +129,32 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     layer_index: Dict[str, LayerMetrics] = _build_layer_index(graph_layers)
 
     # -----------------------------------------------------------------------
-    # Steps 3–9 implemented in Commits C–F.
-    # Expose unused variables to avoid linter warnings; they will be consumed later.
+    # Step 3 — Cross-adapter resolution
     # -----------------------------------------------------------------------
-    _ = (lcom4_threshold, layer_config, utility_layers,
-         graph_edges, graph_violations, contract_violations)
+
+    # 3a. Map function_id -> class_id via lineno-range matching
+    fn_to_class: Dict[str, str] = _resolve_function_to_class(radon_fns, cohesion_classes)
+
+    # 3b. Attach tier values + is_utility_layer flag to LayerMetrics
+    _attach_tier_to_layers(layer_index, config)
+
+    # 3c. Build module -> layer lookup (used by Commits E-F for import resolution)
+    module_to_layer_map: Dict[str, str] = _build_module_to_layer_map(config)
 
     # -----------------------------------------------------------------------
-    # Assemble report (entities + meta only at this stage)
+    # Step 4 — Denormalize cross-metrics
+    # -----------------------------------------------------------------------
+    _attach_cross_metrics(fn_index, class_index, file_index, fn_to_class)
+
+    # -----------------------------------------------------------------------
+    # Steps 5–9 implemented in Commits D–F.
+    # Expose unused variables to avoid linter warnings; consumed in later commits.
+    # -----------------------------------------------------------------------
+    _ = (lcom4_threshold, graph_edges, graph_violations, contract_violations,
+         module_to_layer_map)
+
+    # -----------------------------------------------------------------------
+    # Assemble report (entities + meta; violations populated in Commits D–F)
     # -----------------------------------------------------------------------
     meta = ReportMeta(
         generated_at=datetime.now(tz=timezone.utc).isoformat(),
@@ -249,7 +265,6 @@ def _normalize_radon(
             parameter_count=item.get("parameter_count"),  # None if Lizard not used
         ))
 
-    # MI files: keep as raw dicts; FileMetrics merger consumes them in _build_file_index
     mi_raw = raw.get("maintainability") or {}
     mi_files: List[Dict[str, Any]] = (
         mi_raw.get("files", []) if isinstance(mi_raw, dict) else []
@@ -275,7 +290,7 @@ def _normalize_cohesion(raw: Dict[str, Any]) -> List[ClassMetrics]:
         fp: str = record.get("filepath", "")
         class_id: str = f"{fp}::{raw_name}"
 
-        lcom4_val = record.get("cohesion_score")    # cohesion_score == LCOM4
+        lcom4_val = record.get("cohesion_score")
 
         classes.append(ClassMetrics(
             class_id=class_id,
@@ -287,7 +302,7 @@ def _normalize_cohesion(raw: Dict[str, Any]) -> List[ClassMetrics]:
             lcom4_norm=record.get("cohesion_score_norm"),
             methods_count=record.get("methods_count", 0),
             excluded_from_aggregation=record.get("excluded_from_aggregation", False),
-            label=raw_name,                         # label mirrors class_name for rendering
+            label=raw_name,
         ))
 
     return classes
@@ -306,7 +321,7 @@ def _normalize_import_graph(
       Raw node dict includes "label" field (always equals "id").
       LayerMetrics.label is populated from node["label"].
 
-    tier is not set here (requires config layer_order); resolved in Commit C.
+    tier is not set here; resolved in Step 3 via _attach_tier_to_layers().
     """
     layers: List[LayerMetrics] = []
 
@@ -317,7 +332,7 @@ def _normalize_import_graph(
             layer_id=layer_name,
             layer_name=layer_name,
             label=node.get("label", layer_name),    # "label" always equals id — see D2 correction
-            tier=None,                               # resolved in Commit C via config layer_order
+            tier=None,
             ca=node.get("ca", 0),
             ce=node.get("ce", 0),
             instability=node.get("instability", 0.0),
@@ -352,11 +367,11 @@ def _normalize_pyan3(
       - DeadCodeEntry list
 
     Confidence assignment:
-      Pyan3Adapter reports dead_nodes as a flat list (no per-node confidence field).
+      Pyan3Adapter stores dead_nodes as a flat list (no per-node confidence field).
       Global confidence is derived from collision_rate:
         collision_rate >= 0.35  -> "low"  (parse quality suspect)
         collision_rate <  0.35  -> "high" (parse quality acceptable)
-      Threshold 0.35 matches the pyan3.collision_rate_threshold in solid_config.json.
+      Threshold 0.35 matches solid_config.json pyan3.collision_rate_threshold.
     """
     collision_rate: float = float(raw.get("collision_rate", 0.0))
     global_confidence: str = "low" if collision_rate >= 0.35 else "high"
@@ -446,3 +461,235 @@ def _build_layer_index(layers: List[LayerMetrics]) -> Dict[str, LayerMetrics]:
     Builds layer_name -> LayerMetrics index.
     """
     return {layer.layer_name: layer for layer in layers}
+
+
+# ---------------------------------------------------------------------------
+# Step 3 helpers: cross-adapter resolution
+# ---------------------------------------------------------------------------
+
+def _resolve_function_to_class(
+    fns: List[FunctionMetrics],
+    classes: List[ClassMetrics],
+) -> Dict[str, str]:
+    """
+    Returns {function_id: class_id} for method-type functions, using lineno-range matching.
+
+    Algorithm:
+      For each file, sort classes by lineno ASC.
+      A method at lineno L belongs to class C if:
+        C.lineno <= L < next_class.lineno   (or C is the last class in the file)
+
+    Only processes items with type="method"; standalone functions are skipped.
+    """
+    classes_by_file: Dict[str, List[ClassMetrics]] = defaultdict(list)
+    for cls in classes:
+        classes_by_file[cls.filepath].append(cls)
+    for fp in classes_by_file:
+        classes_by_file[fp].sort(key=lambda c: c.lineno)
+
+    fn_to_class: Dict[str, str] = {}
+
+    for fn in fns:
+        if fn.type != "method":
+            continue
+        file_classes = classes_by_file.get(fn.filepath, [])
+        if not file_classes:
+            continue
+
+        matched_class: Optional[ClassMetrics] = None
+        for i, cls in enumerate(file_classes):
+            if cls.lineno > fn.lineno:
+                # This class starts after the method — stop scanning
+                break
+            next_lineno = (
+                file_classes[i + 1].lineno if i + 1 < len(file_classes) else float("inf")
+            )
+            if cls.lineno <= fn.lineno < next_lineno:
+                matched_class = cls
+
+        if matched_class is not None:
+            fn_to_class[fn.function_id] = matched_class.class_id
+
+    return fn_to_class
+
+
+def _resolve_tier_map(config: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    """
+    Builds layer_name -> tier_index map from config["layer_order"].
+
+    Supports two formats (identical to ImportGraphAdapter._resolve_tier_map):
+      Format A — flat list:    ["routers", "services", "infrastructure", ...]
+      Format B — grouped list: [["routers"], ["services", "infrastructure"], ...]
+
+    Returns None if layer_order is absent or empty (fail-silent).
+    """
+    raw_order = config.get("layer_order")
+    if not raw_order or not isinstance(raw_order, list):
+        return None
+
+    tier_map: Dict[str, int] = {}
+    first = raw_order[0] if raw_order else None
+
+    if isinstance(first, str):
+        for tier_index, layer_name in enumerate(raw_order):
+            if isinstance(layer_name, str) and layer_name.strip():
+                tier_map[layer_name.strip()] = tier_index
+    elif isinstance(first, list):
+        for tier_index, group in enumerate(raw_order):
+            if not isinstance(group, list):
+                continue
+            for layer_name in group:
+                if isinstance(layer_name, str) and layer_name.strip():
+                    tier_map[layer_name.strip()] = tier_index
+    else:
+        return None
+
+    return tier_map if tier_map else None
+
+
+def _attach_tier_to_layers(
+    layer_index: Dict[str, LayerMetrics],
+    config: Dict[str, Any],
+) -> None:
+    """
+    Mutates LayerMetrics objects in place:
+      - Sets tier from config layer_order (None if layer not in tier_map)
+      - Sets is_utility_layer=True for layers listed in config utility_layers
+
+    utility_layers intentionally have no tier (crosscutting; no SDP/SLP checks).
+    """
+    tier_map = _resolve_tier_map(config)
+
+    utility_names: Set[str] = set(
+        (config.get("utility_layers") or {}).keys()
+    )
+
+    for layer_name, layer_m in layer_index.items():
+        layer_m.is_utility_layer = layer_name in utility_names
+        if tier_map is not None and layer_name not in utility_names:
+            layer_m.tier = tier_map.get(layer_name)  # None if not in ordered set
+
+
+def _build_module_to_layer_map(config: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Builds a fully-qualified module prefix -> layer_name lookup dict.
+
+    Normalizes both config["layers"] and config["utility_layers"] prefixes
+    using config["package_root"] (same logic as ImportGraphAdapter._normalize_layer_config).
+
+    Example with package_root="app":
+      {"layers": {"routers": ["routers"]}} -> {"app.routers": "routers"}
+
+    Used in Commits E–F to resolve fully-qualified module names
+    (e.g. "app.routers.search") to their layer names (e.g. "routers").
+    """
+    package_root: str = config.get("package_root", "")
+    package_prefix: str = f"{package_root}." if package_root else ""
+
+    result: Dict[str, str] = {}
+
+    for section_key in ("layers", "utility_layers"):
+        layer_section: Dict[str, Any] = config.get(section_key) or {}
+
+        for layer_name, raw_value in layer_section.items():
+            if isinstance(raw_value, str):
+                paths = [raw_value]
+            elif isinstance(raw_value, list):
+                paths = [p for p in raw_value if isinstance(p, str)]
+            else:
+                continue
+
+            for path in paths:
+                cleaned = path.strip()
+                if not cleaned:
+                    continue
+                # Normalize to full module path (same as ImportGraphAdapter)
+                if package_root and not (
+                    cleaned == package_root or cleaned.startswith(package_prefix)
+                ):
+                    normalized = f"{package_root}.{cleaned}"
+                else:
+                    normalized = cleaned
+                result[normalized] = layer_name
+
+    return result
+
+
+def _resolve_module_to_layer(
+    module: str,
+    module_to_layer_map: Dict[str, str],
+) -> Optional[str]:
+    """
+    Resolves a fully-qualified module name to its layer name using longest-prefix match.
+
+    Example:
+      "app.routers.search" with map {"app.routers": "routers"} -> "routers"
+      "app.routers"        with map {"app.routers": "routers"} -> "routers"
+      "external.lib"       with map {"app.routers": "routers"} -> None
+    """
+    best_len = 0
+    best_layer: Optional[str] = None
+
+    for prefix, layer_name in module_to_layer_map.items():
+        if module == prefix or module.startswith(prefix + "."):
+            if len(prefix) > best_len:
+                best_len = len(prefix)
+                best_layer = layer_name
+
+    return best_layer
+
+
+# ---------------------------------------------------------------------------
+# Step 4: cross-metric denormalization
+# ---------------------------------------------------------------------------
+
+def _attach_cross_metrics(
+    fn_index: Dict[str, FunctionMetrics],
+    class_index: Dict[str, ClassMetrics],
+    file_index: Dict[str, FileMetrics],
+    fn_to_class: Dict[str, str],
+) -> None:
+    """
+    Denormalizes cross-adapter metrics into entity objects (mutates in place).
+
+    Populated fields:
+      FunctionMetrics.file_mi    <- FileMetrics.mi for same filepath
+      FunctionMetrics.class_lcom4 <- ClassMetrics.lcom4 for owning class
+      FunctionMetrics.class_id   <- set from fn_to_class resolution
+      ClassMetrics.file_mi       <- FileMetrics.mi for same filepath
+      ClassMetrics.max_method_cc <- max CC across all methods in the class
+      ClassMetrics.mean_method_cc <- mean CC across all methods in the class
+    """
+    # Attach file_mi to functions
+    for fn in fn_index.values():
+        file_m = file_index.get(fn.filepath)
+        if file_m is not None:
+            fn.file_mi = file_m.mi
+
+    # Attach class_id and class_lcom4 to methods
+    for fn_id, class_id in fn_to_class.items():
+        fn = fn_index.get(fn_id)
+        cls = class_index.get(class_id)
+        if fn is not None:
+            fn.class_id = class_id
+        if fn is not None and cls is not None:
+            fn.class_lcom4 = cls.lcom4
+
+    # Attach file_mi to classes
+    for cls in class_index.values():
+        file_m = file_index.get(cls.filepath)
+        if file_m is not None:
+            cls.file_mi = file_m.mi
+
+    # Compute max/mean method CC per class from fn_to_class mapping
+    cc_per_class: Dict[str, List[int]] = defaultdict(list)
+    for fn_id, class_id in fn_to_class.items():
+        fn = fn_index.get(fn_id)
+        if fn is not None:
+            cc_per_class[class_id].append(fn.cc)
+
+    for class_id, cc_list in cc_per_class.items():
+        cls = class_index.get(class_id)
+        if cls is not None and cc_list:
+            cls.max_method_cc = max(cc_list)
+            cls.mean_method_cc = round(sum(cc_list) / len(cc_list), 2)
