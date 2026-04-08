@@ -200,14 +200,17 @@ class Pyan3Adapter(IAnalyzer):
 
         nodes = used_nodes | nodes
 
-        # Де-дупликация ребер: при совпадении (from, to, confidence) — схлопываем
-        # При конфликте confidence для одной пары (from, to) — сохраняем "high" (более строгое)
+        # Де-дупликация ребер: при совпадении (from, to) — схлопываем по пессимистичной стратегии.
+        # При конфликте confidence для одной пары (from, to) побеждает "low" — заражает "high".
+        # Обоснование: если хотя бы одно вхождение ребра пришло из suspicious-блока,
+        # значит ребро ненадежно по меньшей мере в одном из источников слияния.
+        # Повышать его до "high" на основании другого вхождения семантически неверно.
         best_confidence: Dict[tuple[str, str], str] = {}
         for e in edges:
             key = (e["from"], e["to"])
             current_conf = best_confidence.get(key)
-            # "high" побеждает "low" при дубликатах с разным confidence
-            if current_conf is None or (e["confidence"] == "high" and current_conf == "low"):
+            # "low" заражает "high": если новое вхождение "low" — понижаем итоговый confidence
+            if current_conf is None or (e["confidence"] == "low" and current_conf == "high"):
                 best_confidence[key] = e["confidence"]
 
         edges = [
