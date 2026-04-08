@@ -11,7 +11,7 @@ class RadonFunctionMetrics(BaseModel):
     # НОВЫЕ ПОЛЯ ИЗ LIZARD (опциональные, на случай если lizard упадет)
     parameter_count: Optional[int] = None
 
-class RadonResult(BaseModel):
+class RadonResult(BaseModel): # Зарезервировано для Report Aggregator
     total_items: int
     mean_cc: float
     high_complexity_count: int
@@ -22,12 +22,8 @@ class CohesionClassMetrics(BaseModel):
     methods_count: int
     cohesion_score: float
 
-class CohesionResult(BaseModel):
+class CohesionResult(BaseModel): # Зарезервировано для Report Aggregator
     total_classes_analyzed: int
     mean_cohesion: float
     low_cohesion_count: int
     classes: List[CohesionClassMetrics]
-
-class PydepsResult(BaseModel):
-    nodes: List[Dict[str, Any]]
-    edges: List[Dict[str, Any]]
