@@ -2032,6 +2032,1748 @@
       }
     ]
   },
+  "aggregated_report": {
+    "meta": {
+      "generated_at": "2026-04-08T23:22:23.998562+00:00",
+      "adapter_versions_available": [
+        "radon",
+        "cohesion",
+        "import_graph",
+        "import_linter",
+        "pyan3"
+      ],
+      "adapters_succeeded": [
+        "radon",
+        "cohesion",
+        "import_graph",
+        "import_linter",
+        "pyan3"
+      ],
+      "adapters_failed": [],
+      "lizard_used": true,
+      "config_defaults_used": false
+    },
+    "summary": {
+      "complexity": {
+        "total_items": 50,
+        "mean_cc": 1.82,
+        "high_complexity_count": 0,
+        "rank_distribution": {
+          "B": 3,
+          "A": 47
+        }
+      },
+      "maintainability": {
+        "total_files": 32,
+        "mean_mi": 93.14,
+        "low_mi_count": 0,
+        "rank_distribution": {
+          "A": 32
+        }
+      },
+      "cohesion": {
+        "total_classes_analyzed": 10,
+        "concrete_classes_count": 7,
+        "mean_lcom4_all": 1.0,
+        "mean_lcom4_multi_method": 1.0,
+        "low_cohesion_count": 0,
+        "low_cohesion_threshold": 1
+      },
+      "imports": {
+        "contracts_checked": 1,
+        "broken_contracts": 0,
+        "sdp_violations": 11,
+        "slp_violations": 8,
+        "import_cycles": 0
+      },
+      "dead_code": {
+        "dead_node_count": 0,
+        "high_confidence_dead": 0,
+        "collision_rate": 0.2059
+      },
+      "violations_total": 11,
+      "strong_violations": 0,
+      "weak_violations": 11
+    },
+    "entities": {
+      "files": [
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py",
+          "mi": 80.22,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "mi": 77.95,
+          "mi_rank": "A",
+          "function_count": 4,
+          "mean_cc": 1.25,
+          "max_cc": 2,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "mi": 96.92,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 3.0,
+          "max_cc": 5,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\database.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\database.py",
+          "mi": 97.98,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "mi": 81.15,
+          "mi_rank": "A",
+          "function_count": 4,
+          "mean_cc": 1.75,
+          "max_cc": 3,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "mi": 97.77,
+          "mi_rank": "A",
+          "function_count": 3,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "mi": 72.0,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 4.5,
+          "max_cc": 8,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 3,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\base.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\base.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "mi": 73.91,
+          "mi_rank": "A",
+          "function_count": 5,
+          "mean_cc": 2.2,
+          "max_cc": 7,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 1,
+          "mean_cc": 1.0,
+          "max_cc": 1,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "mi": 69.81,
+          "mi_rank": "A",
+          "function_count": 6,
+          "mean_cc": 1.67,
+          "max_cc": 3,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\article_schemas.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\article_schemas.py",
+          "mi": 85.41,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "mi": 71.26,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 5.5,
+          "max_cc": 9,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\__init__.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\__init__.py",
+          "mi": 100.0,
+          "mi_rank": "A",
+          "function_count": 0,
+          "mean_cc": 0.0,
+          "max_cc": 0,
+          "high_cc_count": 0,
+          "class_count": 0
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "mi": 86.64,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 2.5,
+          "max_cc": 4,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "mi": 99.99,
+          "mi_rank": "A",
+          "function_count": 2,
+          "mean_cc": 1.5,
+          "max_cc": 2,
+          "high_cc_count": 0,
+          "class_count": 1
+        },
+        {
+          "file_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "mi": 89.44,
+          "mi_rank": "A",
+          "function_count": 5,
+          "mean_cc": 1.6,
+          "max_cc": 3,
+          "high_cc_count": 0,
+          "class_count": 1
+        }
+      ],
+      "classes": [
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py::BadProcessor",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "class_name": "BadProcessor",
+          "lineno": 11,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": false,
+          "label": "BadProcessor",
+          "file_mi": 96.92,
+          "max_method_cc": 5,
+          "mean_method_cc": 5.0
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::PostgresArticleRepository",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "class_name": "PostgresArticleRepository",
+          "lineno": 11,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 3,
+          "excluded_from_aggregation": false,
+          "label": "PostgresArticleRepository",
+          "file_mi": 81.15,
+          "max_method_cc": 3,
+          "mean_method_cc": 1.75
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::PostgresUserRepository",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "class_name": "PostgresUserRepository",
+          "lineno": 8,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 2,
+          "excluded_from_aggregation": false,
+          "label": "PostgresUserRepository",
+          "file_mi": 97.77,
+          "max_method_cc": 1,
+          "mean_method_cc": 1.0
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py::ScopusHTTPClient",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "class_name": "ScopusHTTPClient",
+          "lineno": 17,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": false,
+          "label": "ScopusHTTPClient",
+          "file_mi": 72.0,
+          "max_method_cc": 8,
+          "mean_method_cc": 4.5
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py::Article",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+          "class_name": "Article",
+          "lineno": 10,
+          "class_kind": "dataclass",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": true,
+          "label": "Article",
+          "file_mi": 100.0,
+          "max_method_cc": 1,
+          "mean_method_cc": 1.0
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py::User",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+          "class_name": "User",
+          "lineno": 9,
+          "class_kind": "dataclass",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": true,
+          "label": "User",
+          "file_mi": 100.0,
+          "max_method_cc": 1,
+          "mean_method_cc": 1.0
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py::UserRegisterRequest",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "class_name": "UserRegisterRequest",
+          "lineno": 8,
+          "class_kind": "dataclass",
+          "lcom4": 2.0,
+          "lcom4_norm": 0.5,
+          "methods_count": 2,
+          "excluded_from_aggregation": true,
+          "label": "UserRegisterRequest",
+          "file_mi": 71.26,
+          "max_method_cc": 9,
+          "mean_method_cc": 5.5
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py::ArticleService",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "class_name": "ArticleService",
+          "lineno": 6,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": false,
+          "label": "ArticleService",
+          "file_mi": 86.64,
+          "max_method_cc": 4,
+          "mean_method_cc": 2.5
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py::SearchService",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "class_name": "SearchService",
+          "lineno": 8,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 1,
+          "excluded_from_aggregation": false,
+          "label": "SearchService",
+          "file_mi": 99.99,
+          "max_method_cc": 2,
+          "mean_method_cc": 1.5
+        },
+        {
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "class_name": "UserService",
+          "lineno": 7,
+          "class_kind": "concrete",
+          "lcom4": 1.0,
+          "lcom4_norm": 1.0,
+          "methods_count": 4,
+          "excluded_from_aggregation": false,
+          "label": "UserService",
+          "file_mi": 89.44,
+          "max_method_cc": 3,
+          "mean_method_cc": 1.6
+        }
+      ],
+      "functions": [
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py::35::database_url_str",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\config.py",
+          "name": "database_url_str",
+          "type": "method",
+          "lineno": 35,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 80.22,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py::8::get_db_session",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\dependencies.py",
+          "name": "get_db_session",
+          "type": "function",
+          "lineno": 8,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 0,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py::15::hash_password",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "name": "hash_password",
+          "type": "function",
+          "lineno": 15,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 77.95,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py::18::verify_password",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "name": "verify_password",
+          "type": "function",
+          "lineno": 18,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 77.95,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py::21::create_access_token",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "name": "create_access_token",
+          "type": "function",
+          "lineno": 21,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 77.95,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py::28::decode_access_token",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\core\\security.py",
+          "name": "decode_access_token",
+          "type": "function",
+          "lineno": 28,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 77.95,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py::14::process",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "name": "process",
+          "type": "method",
+          "lineno": 14,
+          "cc": 5,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py::BadProcessor",
+          "file_mi": 96.92,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py::6::process",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\demo\\solid_llm_demo.py",
+          "name": "process",
+          "type": "method",
+          "lineno": 6,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 96.92,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::12::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 12,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::PostgresArticleRepository",
+          "file_mi": 81.15,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::15::get_all",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "name": "get_all",
+          "type": "method",
+          "lineno": 15,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::PostgresArticleRepository",
+          "file_mi": 81.15,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::22::save_many",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "name": "save_many",
+          "type": "method",
+          "lineno": 22,
+          "cc": 3,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::PostgresArticleRepository",
+          "file_mi": 81.15,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::46::get_total_count",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py",
+          "name": "get_total_count",
+          "type": "method",
+          "lineno": 46,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_article_repo.py::PostgresArticleRepository",
+          "file_mi": 81.15,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::10::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 10,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::PostgresUserRepository",
+          "file_mi": 97.77,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::13::create",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "name": "create",
+          "type": "method",
+          "lineno": 13,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::PostgresUserRepository",
+          "file_mi": 97.77,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::19::get_by_email",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py",
+          "name": "get_by_email",
+          "type": "method",
+          "lineno": 19,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\postgres_user_repo.py::PostgresUserRepository",
+          "file_mi": 97.77,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py::21::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 21,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py::ScopusHTTPClient",
+          "file_mi": 72.0,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py::27::search",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py",
+          "name": "search",
+          "type": "method",
+          "lineno": 27,
+          "cc": 8,
+          "rank": "B",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\infrastructure\\scopus_client.py::ScopusHTTPClient",
+          "file_mi": 72.0,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py::10::save_many",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "name": "save_many",
+          "type": "method",
+          "lineno": 10,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py::15::get_all",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "name": "get_all",
+          "type": "method",
+          "lineno": 15,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py::24::get_total_count",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\article_repository.py",
+          "name": "get_total_count",
+          "type": "method",
+          "lineno": 24,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py::13::search",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\search_client.py",
+          "name": "search",
+          "type": "method",
+          "lineno": 13,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py::10::create",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+          "name": "create",
+          "type": "method",
+          "lineno": 10,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py::15::get_by_email",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\interfaces\\user_repository.py",
+          "name": "get_by_email",
+          "type": "method",
+          "lineno": 15,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py::15::lifespan",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+          "name": "lifespan",
+          "type": "function",
+          "lineno": 15,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py::65::root",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\main.py",
+          "name": "root",
+          "type": "function",
+          "lineno": 65,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 0,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py::28::__repr__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py",
+          "name": "__repr__",
+          "type": "method",
+          "lineno": 28,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\article.py::Article",
+          "file_mi": 100.0,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py::20::__repr__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py",
+          "name": "__repr__",
+          "type": "method",
+          "lineno": 20,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\models\\user.py::User",
+          "file_mi": 100.0,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py::19::get_article_service",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "name": "get_article_service",
+          "type": "function",
+          "lineno": 19,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 73.91,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py::23::get_scopus_client",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "name": "get_scopus_client",
+          "type": "function",
+          "lineno": 23,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 0,
+          "class_id": null,
+          "file_mi": 73.91,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py::27::get_search_service",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "name": "get_search_service",
+          "type": "function",
+          "lineno": 27,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 73.91,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py::36::get_articles",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "name": "get_articles",
+          "type": "function",
+          "lineno": 36,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": null,
+          "file_mi": 73.91,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py::45::find_articles",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\articles.py",
+          "name": "find_articles",
+          "type": "function",
+          "lineno": 45,
+          "cc": 7,
+          "rank": "B",
+          "parameter_count": 4,
+          "class_id": null,
+          "file_mi": 73.91,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py::16::health_db",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\health.py",
+          "name": "health_db",
+          "type": "function",
+          "lineno": 16,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 100.0,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::24::get_user_service",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "get_user_service",
+          "type": "function",
+          "lineno": 24,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::30::get_current_user",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "get_current_user",
+          "type": "function",
+          "lineno": 30,
+          "cc": 3,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::50::register",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "register",
+          "type": "function",
+          "lineno": 50,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::61::login",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "login",
+          "type": "function",
+          "lineno": 61,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::76::get_me",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "get_me",
+          "type": "function",
+          "lineno": 76,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py::80::password_reset_request",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\routers\\users.py",
+          "name": "password_reset_request",
+          "type": "function",
+          "lineno": 80,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": null,
+          "file_mi": 69.81,
+          "class_lcom4": null
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py::17::password_strength",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "name": "password_strength",
+          "type": "method",
+          "lineno": 17,
+          "cc": 9,
+          "rank": "B",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py::UserRegisterRequest",
+          "file_mi": 71.26,
+          "class_lcom4": 2.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py::33::passwords_match",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py",
+          "name": "passwords_match",
+          "type": "method",
+          "lineno": 33,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 1,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\schemas\\user_schemas.py::UserRegisterRequest",
+          "file_mi": 71.26,
+          "class_lcom4": 2.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py::10::get_articles_paginated",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "name": "get_articles_paginated",
+          "type": "method",
+          "lineno": 10,
+          "cc": 4,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py::ArticleService",
+          "file_mi": 86.64,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py::7::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 7,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\article_service.py::ArticleService",
+          "file_mi": 86.64,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py::11::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 11,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py::SearchService",
+          "file_mi": 99.99,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py::15::find_and_save",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py",
+          "name": "find_and_save",
+          "type": "method",
+          "lineno": 15,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\search_service.py::SearchService",
+          "file_mi": 99.99,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::10::__init__",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "name": "__init__",
+          "type": "method",
+          "lineno": 10,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "file_mi": 89.44,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::13::register",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "name": "register",
+          "type": "method",
+          "lineno": 13,
+          "cc": 2,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "file_mi": 89.44,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::30::login",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "name": "login",
+          "type": "method",
+          "lineno": 30,
+          "cc": 3,
+          "rank": "A",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "file_mi": 89.44,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::42::get_current_user",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "name": "get_current_user",
+          "type": "method",
+          "lineno": 42,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "file_mi": 89.44,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::46::request_password_reset",
+          "filepath": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py",
+          "name": "request_password_reset",
+          "type": "method",
+          "lineno": 46,
+          "cc": 1,
+          "rank": "A",
+          "parameter_count": 2,
+          "class_id": "C:\\pet_projects\\scopus_search_project\\scopus_search_code\\app\\services\\user_service.py::UserService",
+          "file_mi": 89.44,
+          "class_lcom4": 1.0
+        }
+      ],
+      "layers": [
+        {
+          "layer_id": "core",
+          "layer_name": "core",
+          "label": "core",
+          "tier": null,
+          "ca": 2,
+          "ce": 3,
+          "instability": 0.6,
+          "sdp_violation_count": 0,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": true
+        },
+        {
+          "layer_id": "db_libs",
+          "layer_name": "db_libs",
+          "label": "db_libs",
+          "tier": null,
+          "ca": 4,
+          "ce": 0,
+          "instability": 0.0,
+          "sdp_violation_count": 0,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "infrastructure",
+          "layer_name": "infrastructure",
+          "label": "infrastructure",
+          "tier": 2,
+          "ca": 2,
+          "ce": 3,
+          "instability": 0.6,
+          "sdp_violation_count": 3,
+          "slp_violation_count": 2,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "interfaces",
+          "layer_name": "interfaces",
+          "label": "interfaces",
+          "tier": 3,
+          "ca": 2,
+          "ce": 1,
+          "instability": 0.33,
+          "sdp_violation_count": 1,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "models",
+          "layer_name": "models",
+          "label": "models",
+          "tier": 4,
+          "ca": 4,
+          "ce": 1,
+          "instability": 0.2,
+          "sdp_violation_count": 0,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "routers",
+          "layer_name": "routers",
+          "label": "routers",
+          "tier": 0,
+          "ca": 0,
+          "ce": 7,
+          "instability": 1.0,
+          "sdp_violation_count": 5,
+          "slp_violation_count": 4,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "schemas",
+          "layer_name": "schemas",
+          "label": "schemas",
+          "tier": null,
+          "ca": 2,
+          "ce": 0,
+          "instability": 0.0,
+          "sdp_violation_count": 0,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": true
+        },
+        {
+          "layer_id": "services",
+          "layer_name": "services",
+          "label": "services",
+          "tier": 1,
+          "ca": 1,
+          "ce": 4,
+          "instability": 0.8,
+          "sdp_violation_count": 2,
+          "slp_violation_count": 2,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        },
+        {
+          "layer_id": "web_libs",
+          "layer_name": "web_libs",
+          "label": "web_libs",
+          "tier": null,
+          "ca": 2,
+          "ce": 0,
+          "instability": 0.0,
+          "sdp_violation_count": 0,
+          "slp_violation_count": 0,
+          "linter_broken_imports": 0,
+          "is_utility_layer": false
+        }
+      ]
+    },
+    "violations": [
+      {
+        "id": "SDP_VIOLATION::infrastructure::db_libs",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "infrastructure",
+          "to_layer": "db_libs"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.6,
+          "dep_instability": 0.0,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.6,
+              "dep_instability": 0.0
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::infrastructure::interfaces",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "infrastructure",
+          "to_layer": "interfaces"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.6,
+          "dep_instability": 0.33,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.6,
+              "dep_instability": 0.33
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::infrastructure::models",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "infrastructure",
+          "to_layer": "models"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.6,
+          "dep_instability": 0.2,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.6,
+              "dep_instability": 0.2
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::interfaces::models",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "interfaces",
+          "to_layer": "models"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.33,
+          "dep_instability": 0.2,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.33,
+              "dep_instability": 0.2
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::routers::db_libs",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "routers",
+          "to_layer": "db_libs"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 1.0,
+          "dep_instability": 0.0,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 1.0,
+              "dep_instability": 0.0
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::routers::infrastructure",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "routers",
+          "to_layer": "infrastructure"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 1.0,
+          "dep_instability": 0.6,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 1.0,
+              "dep_instability": 0.6
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::routers::models",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "routers",
+          "to_layer": "models"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 1.0,
+          "dep_instability": 0.2,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 1.0,
+              "dep_instability": 0.2
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::routers::services",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "routers",
+          "to_layer": "services"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 1.0,
+          "dep_instability": 0.8,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 1.0,
+              "dep_instability": 0.8
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::routers::web_libs",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "routers",
+          "to_layer": "web_libs"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 1.0,
+          "dep_instability": 0.0,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 1.0,
+              "dep_instability": 0.0
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::services::interfaces",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "services",
+          "to_layer": "interfaces"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.8,
+          "dep_instability": 0.33,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.8,
+              "dep_instability": 0.33
+            }
+          }
+        ],
+        "strength": "weak"
+      },
+      {
+        "id": "SDP_VIOLATION::services::models",
+        "type": "SDP_VIOLATION",
+        "severity": "error",
+        "location": {
+          "filepath": null,
+          "lineno": null,
+          "name": null,
+          "class_name": null,
+          "layer": null,
+          "from_layer": "services",
+          "to_layer": "models"
+        },
+        "metrics": {
+          "cc": null,
+          "rank": null,
+          "parameter_count": null,
+          "mi": null,
+          "lcom4": null,
+          "instability": 0.8,
+          "dep_instability": 0.2,
+          "skip_distance": null
+        },
+        "evidence": [
+          {
+            "source": "import_graph",
+            "details": {
+              "rule": "SDP-001",
+              "severity": "error",
+              "instability": 0.8,
+              "dep_instability": 0.2
+            }
+          }
+        ],
+        "strength": "weak"
+      }
+    ],
+    "dead_code": []
+  },
   "llm": {
     "status": "success",
     "findings": [],
