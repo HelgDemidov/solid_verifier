@@ -302,40 +302,133 @@ scopus_search_code/                           # Root directory of the analyzed p
 
 ## Configuration (`solid_config.json`)
 
-The `solid_config.json` file, located in the root of the analyzed project (`scopus_search_code/`), is the single point of configuration for the tool. Thanks to strict orchestration, the entire pipeline (both static and LLM) unquestioningly follows these routing rules.
+`solid_config.json` lives in the **root of the analysed project** (`scopus_search_code/`) and is the **single configuration point** for the entire pipeline. Every adapter — static and LLM — unconditionally respects its rules. Changing any parameter takes effect immediately across the whole pipeline without touching Python code.
 
-- **`package_root`**: the root Python package to analyze (e.g., `app`). This is the **single point of target directory control** for all adapters.
-- **`layers`**: a mapping of logical architectural layers to module prefixes. Used by both the import graph and the `import-linter` adapter.
-- **`ignore_dirs`**: a global list of excluded directories (`.venv`, `__pycache__`, `tests`, `tools`, etc.). Ensures no adapter ever strays outside the core business logic.
-- **`external_layers`**: a mapping of logical names for external dependencies.
-- **`llm`**: LLM layer settings. The `api_key` parameter can (and should) be left as `null` — the adapter will automatically and safely load the `OPENROUTER_API_KEY` environment variable from the `.env` file.
+---
+
+### Full file with annotations
 
 ```json
 {
   "package_root": "app",
+
   "layers": {
-    "routers": ["routers"],
-    "services": ["services"],
+    "routers":        ["routers"],
+    "services":       ["services"],
     "infrastructure": ["infrastructure"],
-    "models": ["models"],
-    "interfaces": ["interfaces"]
+    "interfaces":     ["interfaces"],
+    "models":         ["models"]
   },
-  "ignore_dirs": [".venv", "__pycache__", "tests", "tools"],
+
+  "utility_layers": {
+    "core":    ["core"],
+    "schemas": ["schemas"]
+  },
+
+  "layer_order": [
+    "routers",
+    "services",
+    "infrastructure",
+    "interfaces",
+    "models"
+  ],
+
+  "interface_layers": ["interfaces"],
+
+  "sdp_tolerance": 0.10,
+
+  "allowed_dependency_exceptions": [
+    {
+      "source": "models",
+      "target": "db_libs",
+      "reason": "ORM models intentionally inherit SQLAlchemy Base — pending domain/persistence separation"
+    }
+  ],
+
+  "ignore_dirs": [
+    ".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache",
+    ".idea", ".vscode", "tests", "tools", "alembic", "scripts",
+    "build", "dist"
+  ],
+
   "external_layers": {
-    "db_libs": ["sqlalchemy"],
+    "db_libs":  ["sqlalchemy"],
     "web_libs": ["fastapi", "starlette"]
   },
+
   "llm": {
-    "enabled": true,
-    "provider": "openrouter",
-    "model": "CHOOSE_YOUR_MODEL_AT_https://openrouter.ai/models",
-    "api_key": null,
-    "endpoint": null,
-    "max_tokens_per_run": 1000,
-    "cache_dir": ".solid-cache/llm",
-    "prompts_dir": "tools/solid_verifier/prompts"
+    "enabled":            true,
+    "provider":           "openrouter",
+    "model":              "openai/gpt-4o-mini",
+    "api_key":            null,
+    "endpoint":           null,
+    "max_tokens_per_run": 3000,
+    "cache_dir":          ".solid-cache/llm",
+    "prompts_dir":        "tools/solid_verifier/prompts"
   }
 }
+```
+
+---
+
+### Field reference
+
+#### Target package
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `package_root` | string | Name of the root Python package to analyse. **The single directory-control point** for all adapters (Radon, Cohesion, ImportGraph, ImportLinter, Pyan3, Heuristics) — every adapter operates strictly within this package. |
+
+---
+
+#### Architectural layers
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `layers` | `Dict[str, List[str]]` | Maps logical architecture layer names to sub-package names inside `package_root`. Used by `ImportGraphAdapter` to build the layer graph and compute stability metrics, and by `ImportLinterAdapter` to generate layered-architecture contracts. |
+| `utility_layers` | `Dict[str, List[str]]` | Cross-cutting layers (e.g. `core`, `schemas`) that may be imported by and may import any other layer. They participate in metrics and visualisation but are **intentionally excluded** from SDP and SLP checks to prevent false violations. |
+| `layer_order` | `List[str]` | Ordered list of layers from the topmost (user-facing) to the bottommost (infrastructure). The **single source of truth** for the allowed dependency direction: upper layers may depend on lower ones; the reverse is a violation. Used by both architectural adapters. |
+| `interface_layers` | `List[str]` | Layers declared as "interface" layers. Affects violation severity in the `SLP-001` detector: a Skip-Layer jump that bypasses an interface layer is rated more strictly. |
+
+---
+
+#### SDP settings
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sdp_tolerance` | float | Acceptable instability gap for the Stable Dependencies Principle check (`SDP-001`). If the instability of a dependent layer exceeds the instability of its dependency by less than this value, no violation is recorded. Current value: `0.10` (10 %). |
+| `allowed_dependency_exceptions` | `List[Object]` | Explicit exceptions to SDP checks. Each entry: `source` (the depending layer), `target` (external layer name), `reason` (justification). Use for deliberate and documented architectural trade-offs — e.g. ORM models inheriting `SQLAlchemy Base`. |
+
+---
+
+#### Directory exclusions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ignore_dirs` | `List[str]` | Global list of directories excluded from all adapters. **Guarantees** that no adapter reaches beyond business logic: virtual environments, caches, tests, tooling, and build artefacts are excluded at the configuration level, not in code. |
+
+---
+
+#### External dependencies
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `external_layers` | `Dict[str, List[str]]` | Maps logical names of external libraries to their real package names. Used by `ImportGraphAdapter` to include external dependencies in the layer graph and correctly compute stability metrics (`Ca`, `Ce`, `Instability`). Allows tracking dependencies on `sqlalchemy`, `fastapi`, etc. in an architectural context rather than as a black box. |
+
+---
+
+#### LLM settings
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `llm.enabled` | bool | Enables or completely disables the LLM layer. When `false`, the pipeline runs on static analysis and heuristics only — no network calls are made. |
+| `llm.provider` | string | Provider name. Currently supported value: `"openrouter"`. |
+| `llm.model` | string | Model identifier in the provider's format. For OpenRouter — `"openai/gpt-4o-mini"` or any other model from [openrouter.ai/models](https://openrouter.ai/models). |
+| `llm.api_key` | null | **Always leave as `null`**. The key is automatically read from the `OPENROUTER_API_KEY` environment variable (`.env` file). This is an intentional safeguard against secrets leaking into version control or JSON configs. |
+| `llm.endpoint` | null | Overrides the API endpoint URL. `null` uses the default OpenRouter address. Useful for proxies or self-hosted LLMs. |
+| `llm.max_tokens_per_run` | int | Total token budget for the entire LLM run. When the budget is exhausted, remaining candidates are skipped — only static and heuristic findings will appear in the report for them. Candidates are processed in descending priority order (number of heuristic hits + presence of class hierarchy). |
+| `llm.cache_dir` | string | Path to the file-based LLM response cache directory. The cache key is the SHA-256 hash of the (prompt + options) pair: an identical request is never sent twice and no tokens are spent. |
+| `llm.prompts_dir` | string | Path to the directory containing `.md` prompt templates and `response_schema.json`. Allows prompt changes without modifying Python code. |
 ```
 
 ***
