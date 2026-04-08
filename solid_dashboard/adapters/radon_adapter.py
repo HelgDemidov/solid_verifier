@@ -54,7 +54,10 @@ class RadonAdapter(IAnalyzer):
             # защита от неустановленного пакета radon
             return {"error": "Radon executable not found. Please install radon."}
         except subprocess.CalledProcessError as e:
-            return {"error": f"Radon execution failed: {e.stderr}"}
+            # e.stderr может быть None если subprocess поднят без capture_output
+            # или если CalledProcessError создан программно без stderr-аргумента
+            stderr_msg = e.stderr or "(no stderr)"
+            return {"error": f"Radon execution failed: {stderr_msg}"}
         except json.JSONDecodeError:
             return {"error": "Failed to parse Radon JSON output"}
 
