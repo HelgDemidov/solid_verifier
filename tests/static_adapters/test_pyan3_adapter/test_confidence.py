@@ -6,6 +6,13 @@
 #   2. По умолчанию (источник не подозрительный) — confidence="high".
 # Каскадное распространение: suspicious-блок может стать целью другого ребра,
 # что НЕ влияет на confidence этого входящего ребра — только источник важен.
+#
+# Примечание о pytest.warns:
+# Тесты, намеренно создающие suspicious-блоки, вызывают adapter.run() целиком,
+# включая проверку collision_rate. В мини-фикстурах (2–4 узла) даже 1 suspicious
+# блок даёт 50% rate > порога 35%, что корректно эмитирует RuntimeWarning.
+# pytest.warns явно фиксирует это как ожидаемый контракт: если адаптер
+# перестанет эмитировать предупреждение — тест упадёт и регрессия поймается.
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -45,8 +52,13 @@ class TestConfidenceDefault:
     def test_suspicious_block_gets_low_confidence(self, adapter, tmp_py_project, base_config):
         # блок с дублем в [U]-именах → suspicious → рёбра confidence="low"
         # extra_used добавляет второй [U] B внутри блока A → коллизия
+        #
+        # Ожидаемый side-effect: 1 suspicious из 2 узлов = 50% > порога 35%
+        # → адаптер эмитирует RuntimeWarning о высоком collision rate.
+        # Фиксируем это как явный контракт через pytest.warns.
         raw = make_raw_output([("A", "B")], extra_used={"A": ["B"]})
-        result = _run_with_output(adapter, tmp_py_project, base_config, raw)
+        with pytest.warns(RuntimeWarning, match="high collision rate"):
+            result = _run_with_output(adapter, tmp_py_project, base_config, raw)
         assert_success_schema(result)
         assert_edge(result["edges"], "A", "B", "low")
         assert result["edge_count_low"] == 1
@@ -86,11 +98,16 @@ class TestConfidenceCascading:
 
     def test_all_edges_low_when_all_blocks_suspicious(self, adapter, tmp_py_project, base_config):
         # оба блока suspicious → все рёбра low
+        #
+        # Ожидаемый side-effect: 2 suspicious из 4 узлов = 50% > порога 35%
+        # → адаптер эмитирует RuntimeWarning о высоком collision rate.
+        # Фиксируем это как явный контракт через pytest.warns.
         raw = (
             make_raw_output([("A", "B")], extra_used={"A": ["B"]}) +
             make_raw_output([("C", "D")], extra_used={"C": ["D"]})
         )
-        result = _run_with_output(adapter, tmp_py_project, base_config, raw)
+        with pytest.warns(RuntimeWarning, match="high collision rate"):
+            result = _run_with_output(adapter, tmp_py_project, base_config, raw)
         assert_success_schema(result)
         assert result["edge_count_low"] == 2
         assert result["edge_count_high"] == 0
