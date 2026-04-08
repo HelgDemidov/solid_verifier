@@ -29,8 +29,10 @@ class TestErrorPaths:
     # -----------------------------------------------------------------------
 
     def test_no_py_files_returns_error(self, adapter, tmp_path, base_config):
-        # tmp_path — пустая директория без .py-файлов; os.walk ничего не найдет
-        result = adapter.run(str(tmp_path), {}, base_config)
+        # tmp_path без __init__.py → сначала RuntimeWarning о пакете,
+        # затем _error() из-за отсутствия .py-файлов
+        with pytest.warns(RuntimeWarning, match="has no __init__.py"):
+            result = adapter.run(str(tmp_path), {}, base_config)
         assert_error_schema(result)
         assert "No python files found" in result["error"]
 
