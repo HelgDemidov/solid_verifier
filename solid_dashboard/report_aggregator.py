@@ -124,6 +124,13 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     all_violations: List[ViolationEvent] = _deduplicate_violations(raw_violations)
 
     # Step 8 — compute summary
+    # Pylance cannot narrow Optional types through ternary expressions in argument position.
+    # Pre-compute typed Dict[str, Any] locals using isinstance guards on separate lines.
+    _linter_val = context.get("import_linter")
+    _pyan3_val = context.get("pyan3")
+    linter_raw_summary: Dict[str, Any] = _linter_val if isinstance(_linter_val, dict) else {}
+    pyan3_raw_summary: Dict[str, Any] = _pyan3_val if isinstance(_pyan3_val, dict) else {}
+
     summary = _compute_summary(
         fn_index=fn_index,
         file_index=file_index,
@@ -132,8 +139,8 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
         violations=all_violations,
         dead_entries=dead_entries,
         lcom4_threshold=lcom4_threshold,
-        linter_raw=context.get("import_linter") if isinstance(context.get("import_linter"), dict) else {},
-        pyan3_raw=context.get("pyan3") if isinstance(context.get("pyan3"), dict) else {},
+        linter_raw=linter_raw_summary,
+        pyan3_raw=pyan3_raw_summary,
     )
 
     # Step 9 — assemble final report
@@ -180,11 +187,25 @@ def _safe_normalize(key, context, normalize_fn, succeeded, failed, default):
 
 
 def _is_error_result(raw: Any) -> bool:
+    """
+    Returns True only when an adapter result signals a genuine crash.
+
+    The sole discriminator is the presence of an "error" key.
+    Both Pyan3Adapter._error() and ImportLinterAdapter._error_message()
+    always include "error" when they crash, and never include it in their
+    normal operating returns.
+
+    IMPORTANT — is_success=False is intentionally NOT checked here:
+      ImportLinterAdapter sets is_success=False when contracts are broken.
+      This is a normal, expected state that carries populated violation_details
+      — the very data the aggregator exists to consume. Treating it as an error
+      would silently discard all LAYER_VIOLATION evidence (confirmed bug: T1).
+      For Pyan3Adapter, is_success=False only ever appears together with an
+      "error" key, so the "error" check alone is sufficient for both adapters.
+    """
     if not isinstance(raw, dict):
         return True
     if "error" in raw:
-        return True
-    if raw.get("is_success") is False:
         return True
     return False
 
@@ -713,34 +734,45 @@ def _compute_summary(
     )
 
     # --- Maintainability ---
+    # Use a typed List[float] comprehension so Pylance can narrow Optional[float] -> float.
+    # Pre-filtered lists of ClassMetrics/FileMetrics retain Optional types for Pylance
+    # even after `if f.mi is not None`; a fresh comprehension with the same guard narrows.
+    mi_values: List[float] = [f.mi for f in file_index.values() if f.mi is not None]
     mi_files = [f for f in file_index.values() if f.mi is not None]
     rank_dist_mi: Dict[str, int] = defaultdict(int)
     for f in mi_files:
         if f.mi_rank:
             rank_dist_mi[f.mi_rank] += 1
     maintainability = MaintainabilitySummary(
-        total_files=len(mi_files),
-        mean_mi=round(sum(f.mi for f in mi_files) / len(mi_files), 2) if mi_files else 0.0,
+        total_files=len(mi_values),
+        mean_mi=round(sum(mi_values) / len(mi_values), 2) if mi_values else 0.0,
         low_mi_count=sum(1 for f in mi_files if f.mi_rank == "C"),
         rank_distribution=dict(rank_dist_mi),
     )
 
     # --- Cohesion ---
     concrete = [c for c in class_index.values() if not c.excluded_from_aggregation]
-    concrete_with_lcom4 = [c for c in concrete if c.lcom4 is not None]
-    multi_method = [c for c in concrete_with_lcom4 if c.methods_count >= 2]
+    # Extract float LCOM4 values via typed comprehensions — same Pylance narrowing rule
+    # as MI above: Optional[float] is only narrowed to float inside the same comprehension
+    # that contains the `if c.lcom4 is not None` guard, not in a downstream generator.
+    lcom4_all_vals: List[float] = [
+        c.lcom4 for c in class_index.values()
+        if not c.excluded_from_aggregation and c.lcom4 is not None
+    ]
+    lcom4_multi_vals: List[float] = [
+        c.lcom4 for c in class_index.values()
+        if not c.excluded_from_aggregation and c.lcom4 is not None and c.methods_count >= 2
+    ]
     cohesion = CohesionSummary(
         total_classes_analyzed=len(class_index),
         concrete_classes_count=len(concrete),
         mean_lcom4_all=round(
-            sum(c.lcom4 for c in concrete_with_lcom4) / len(concrete_with_lcom4), 2
-        ) if concrete_with_lcom4 else 0.0,
+            sum(lcom4_all_vals) / len(lcom4_all_vals), 2
+        ) if lcom4_all_vals else 0.0,
         mean_lcom4_multi_method=round(
-            sum(c.lcom4 for c in multi_method) / len(multi_method), 2
-        ) if multi_method else 0.0,
-        low_cohesion_count=sum(
-            1 for c in concrete_with_lcom4 if c.lcom4 > lcom4_threshold
-        ),
+            sum(lcom4_multi_vals) / len(lcom4_multi_vals), 2
+        ) if lcom4_multi_vals else 0.0,
+        low_cohesion_count=sum(1 for v in lcom4_all_vals if v > lcom4_threshold),
         low_cohesion_threshold=lcom4_threshold,
     )
 
