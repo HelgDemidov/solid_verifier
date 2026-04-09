@@ -259,12 +259,108 @@ SOLID Verifier — это **трёхслойный статический ана
 
 10. **`.env.example`**: `OPENROUTER_API_KEY=your_key_here` — единственная внешняя секрет. `api_key: null` в `solid_config.json` означает: ключ читается исключительно из `.env`/переменной окружения.
 
-11. **Тесты сосредоточены на `CohesionAdapter`** (10 файлов, глубокое покрытие включая MRO-enrichment и LCOM4 edge-cases), `ImportGraphAdapter` и `ImportLinterAdapter`. Тесты для LLM-слоя и эвристик — директория `tests/llm/` существует, детали не читал. `tests/test_report_aggregator.py` (Commit G) — 9 интеграционных тестов T1–T8 + smoke, включая xfail T7 (киз-цикл Phase 1).
+11. **Тестовое покрытие агрегатора пайплайна**
 
-12. **`report_aggregator` конфиг-ключи:** `cohesion_threshold` (деф. 1), `layers`, `utility_layers`, `layer_order`, `package_root`. `CC_THRESHOLD = 10` — модульная константа, зеркальная значению в `radon_adapter.py`; ключа `cc_threshold` в `solid_config.json` нет.
+Актуальное состояние после коммитов `677ea81` / `630a581` / `1aab260` / `5fc8df9`:
 
-13. **`_is_error_result()` различает сбой адаптера через ключ `"error"`, не через `is_success`.** `ImportLinterAdapter` возвращает `is_success=False` при нарушении контрактов — это нормальное рабочее состояние с заполненным `violation_details`. Сбой любого адаптера всегда содержит `"error"` ключ.
+#### `tests/test_report_aggregator.py` (T1–T12 + smoke + T7b)
 
-14. **Phase 1 детекция циклов в `_detect_import_cycles()`.** Двунаправленный скан обнаруживает только 2-узловые циклы; циклы ≥ 3 не обнаруживаются (известное ограничение, xfail T7). Phase 2: Tarjan SCC.
+| Тест | Сценарий | Статус |
+|---|---|---|
+| T1 | `LAYER_VIOLATION` dedup: оба адаптера → 1 событие, 2 evidence, strength=strong | passing |
+| T2 | Кросс-метрики: `class_lcom4` на `FunctionMetrics`, `OVERLOADED_CLASS` | passing |
+| T3 | Graceful degradation: `pyan3` отсутствует → `dead_code=[]`, `adapters_failed` | passing |
+| T4 | `HIGH_CC_METHOD` severity: CC=16→error, CC=11→warning, CC=10→нет события (граница) | passing |
+| T5 | `DEAD_CODE_NODE` confidence + enrichment `filepath`/`layer` (Constraints 3 & 5) | passing |
+| T6 | `IMPORT_CYCLE` двунаправленное ребро | passing |
+| T7 | `IMPORT_CYCLE` 3-узловой цикл (Phase 2 Tarjan SCC) | passing *(было xfail)* |
+| T7b | Регрессия Phase 2: двунаправленные пары по-прежнему детектируются | passing |
+| T8 | Empty config: нет исключений, `config_defaults_used=True` | passing |
+| T9 | `_is_error_result`: `is_success=False` без `"error"` key → NOT in `adapters_failed`; `LAYER_VIOLATION` события генерируются (регрессия коммита `34a625d`) | passing |
+| T10 | `_is_error_result`: `"error"` key → `adapters_failed`, события не генерируются | passing |
+| T11 | `_enrich_dead_code_entries`: односегментное имя `"legacy_module"` → `filepath="legacy_module.py"`, `layer=None`; нет `IndexError` | passing |
+| T12 | `_enrich_dead_code_entries`: двухсегментное имя `"app.legacy_fn"` → `filepath="app.py"`, `layer=None` | passing |
+| smoke | Все ключи верхнего уровня присутствуют при `context={}` | passing |
+
+#### `tests/test_defaults.py` 
+
+| Тест | Сценарий | Статус |
+|---|---|---|
+| D1 | `CC_THRESHOLD == 10`, тип `int` | passing |
+| D2 | `LCOM4_THRESHOLD == 1`, тип `int` | passing |
+| D3 | `LOW_MI_RANK == "C"`, тип `str`, длина 1 | passing |
+| D4 | `DEAD_CODE_CONFIDENCE_CUTOFF == 0.35` (`pytest.approx`), тип `float`, строго в `(0, 1)` | passing |
+| D5 | `radon_adapter.CC_THRESHOLD == defaults.CC_THRESHOLD == 10` — ловит рассинхронизацию при хардкоде | passing |
+
+12. **`defaults.py` — единый источник порогов**
+
+Введён коммитом `3be1e72` (`refactor(defaults): extract CC_THRESHOLD…`). Файл `solid_dashboard/defaults.py` содержит все магические числа, общие для нескольких модулей:
+
+| Константа | Значение | Потребители |
+|---|---|---|
+| `CC_THRESHOLD` | `10` | `report_aggregator.py`, `radon_adapter.py` |
+| `LCOM4_THRESHOLD` | `1` | `report_aggregator.py` |
+| `LOW_MI_RANK` | `"C"` | `report_aggregator.py` |
+| `DEAD_CODE_CONFIDENCE_CUTOFF` | `0.35` | `report_aggregator.py` |
+
+`CC_THRESHOLD` **не является ключом конфига** (`solid_config.json`). Это модульная константа, не переопределяемая пользователем. `cohesion_threshold` — единственный порог, читаемый из конфига через `config.get("cohesion_threshold", LCOM4_THRESHOLD)`.
+
+---
+
+13. **`_is_error_result()` — логика определения сбоя адаптера**
+
+Оба аварийных адаптера (`ImportLinterAdapter`, `Pyan3Adapter`) всегда включают ключ `"error"` в ответ при реальном сбое. Поле `is_success=False` **не является** надёжным индикатором сбоя: `ImportLinterAdapter` возвращает `is_success=False` и при нормальной работе (когда обнаружены нарушения контрактов), сопровождая это данными `violation_details`.
+
+Исправлено коммитом `34a625d` (`fix(aggregator): Pylance type errors…`): ветка `if raw.get("is_success") is False` полностью удалена из `_is_error_result()`. Единственный надёжный признак сбоя — наличие ключа `"error"` в словаре результата.
+
+14. **Обнаружение циклов — Phase 1 → Phase 2 (Tarjan SCC)**
+
+**Phase 1 (историческая, заменена)**
+
+Первоначальная реализация `_detect_import_cycles()` (коммит `40cb93b`) использовала сканирование двунаправленных пар: для каждого ребра `A→B` проверялось существование обратного ребра `B→A`. Ограничение: циклы длиной ≥ 3 (`A→B→C→A`) не обнаруживались. Это ограничение документировалось тестом T7 с декоратором `@pytest.mark.xfail`.
+
+**Phase 2 (текущая реализация, коммит `5fc8df9`)**
+
+Алгоритм заменён на **Tarjan SCC** через `networkx.strongly_connected_components()`:
+
+```python
+import networkx as nx
+
+def _detect_import_cycles(edges: List[Dict]) -> List[ViolationEvent]:
+    g = nx.DiGraph()
+    for edge in edges:
+        g.add_edge(edge["source"], edge["target"])
+    events = []
+    for scc in nx.strongly_connected_components(g):
+        if len(scc) >= 2:
+            # SCC размером 2 = bidirectional pair (Phase 1 поведение сохранено)
+            # SCC размером >= 3 = реальный многоузловой цикл (Phase 2 новое)
+            ...
+    return events
+```
+Инварианты Phase 2:
+- SCC размером 2 → эквивалентно Phase 1 двунаправленной паре (регрессия не введена).
+- SCC размером ≥ 3 → одно событие `IMPORT_CYCLE`, `severity="error"`, `evidence[0].details = {"cycle_size": N, "cycle_nodes": [...]}`
+- Пустой граф → `strongly_connected_components` возвращает пустой итератор → ноль событий (корректное поведение при отсутствии импортов).
+
+Тест T7 (`test_t7_import_cycle_3node_detected`) переведён из `xfail` в passing-тест. Регрессионный тест T7b (`test_t7b_import_cycle_2node_regression`) подтверждает, что двунаправленные пары по-прежнему обнаруживаются.
+
+`schema.py` → `ImportsSummary.import_cycles` обновлён:
+> `# Tarjan SCC Phase 2: количество SCC размером >= 2`
+
+15. **Обогащение `DeadCodeEntry` — filepath и layer**
+
+Коммит `1aab260` (`feat(report_aggregator): enrich dead_code entries…`).
+
+`Pyan3Adapter` предоставляет только `qualified_name` вида `"app.services.old.fn"`. Функция `_enrich_dead_code_entries(dead_entries, module_to_layer_map, package_root)`, вызываемая в Step 3 `aggregate_results()`, обогащает каждый `DeadCodeEntry`:
+
+1. **`filepath`**: `module = qualified_name.rsplit(".", 1)[0]` → `filepath = module.replace(".", "/") + ".py"`
+2. **`layer`**: longest-prefix match по `module_to_layer_map` (тот же map, что используется для `LAYER_VIOLATION`).
+
+Эвристика срабатывает корректно:
+- `"app.services.old_service.legacy_fn"` → `filepath="app/services/old_service.py"`, `layer="services"`
+- `"app.utils.legacy.old_fn"` → `filepath="app/utils/legacy.py"`, `layer=None` (модуль не совпадает ни с одним слоем из конфига)
+
+`ViolationEvent.location.layer` автоматически заполняется из обогащённой записи в `_emit_dead_code_events()`.
 
 ***
