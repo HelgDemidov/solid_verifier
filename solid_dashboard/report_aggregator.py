@@ -122,9 +122,21 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
     overloaded_events = _emit_overloaded_class_events(
         class_index, fn_to_class, fn_index, CC_THRESHOLD, lcom4_threshold)
 
+    # --- 5 кросс-событий — все после _merge_layer_violations (счётчики уже заполнены)
+    dead_risk_events = _emit_dead_code_risk_events(dead_entries, fn_index, CC_THRESHOLD)
+    dead_layer_events = _emit_dead_layer_node_events(dead_entries, layer_index)
+    unstable_layer_events = _emit_unstable_cohesion_layer_events(
+        layer_index, class_index, module_to_layer_map, lcom4_threshold)
+    low_mi_layer_events = _emit_low_mi_violating_layer_events(
+        file_index, layer_index, module_to_layer_map)
+    low_cohesion_contract_events = _emit_low_cohesion_contract_layer_events(
+        class_index, layer_index, module_to_layer_map, lcom4_threshold)
+
     raw_violations: List[ViolationEvent] = (
         cc_events + mi_events + cohesion_events + dead_events
         + cycle_events + layer_events + overloaded_events
+        + dead_risk_events + dead_layer_events + unstable_layer_events
+        + low_mi_layer_events + low_cohesion_contract_events
     )
 
     # Step 7 — deduplicate and sort
@@ -393,6 +405,16 @@ def _resolve_module_to_layer(module, module_to_layer_map):
         if (module == pfx or module.startswith(pfx + ".")) and len(pfx) > best_len:
             best_len, best = len(pfx), ln
     return best
+
+
+def _filepath_to_module(filepath: str) -> str:
+    """
+    Конвертирует путь файла в имя модуля Python для разрешения через module_to_layer_map.
+    Пример: "app/services/search_service.py" -> "app.services.search_service"
+    Используется эмиттерами кросс-событий для сопоставления класса/файла со слоем.
+    Требует Python 3.9+ (str.removesuffix) — проект использует Python 3.10+.
+    """
+    return filepath.replace("/", ".").removesuffix(".py")
 
 
 def _enrich_dead_code_entries(
@@ -717,6 +739,266 @@ def _emit_overloaded_class_events(class_index, fn_to_class, fn_index, cc_thresho
                     "max_cc_method_name": top.name, "max_complexity": top.cc,
                     "max_cc_method_lineno": top.lineno, "mean_cc_in_class": cls.mean_method_cc,
                     "high_cc_methods_count": len(high_cc),
+                }),
+            ],
+            strength="strong",
+        ))
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Step 6 (extension): 5 cross-adapter synergy events
+# Все эмиттеры вызываются после _merge_layer_violations — счётчики LayerMetrics уже заполнены
+# ---------------------------------------------------------------------------
+
+def _emit_dead_code_risk_events(
+    dead_entries: List[DeadCodeEntry],
+    fn_index: Dict[str, FunctionMetrics],
+    cc_threshold: int,
+) -> List[ViolationEvent]:
+    """
+    DEAD_CODE_RISK: мертвый узел (pyan3) + высокая цикломатическая сложность (radon CC).
+    Мертвый код с высоким CC вдвойне опасен: недостижим И труден для безопасного удаления.
+
+    Сопоставление: (entry.filepath, последний сегмент qualified_name) == (fn.filepath, fn.name).
+    Корректно работает для функций уровня модуля. Для методов класса entry.filepath указывает
+    на несуществующий путь (ограничение _enrich_dead_code_entries) — совпадений нет,
+    событие молча не генерируется. Ограничение задокументировано в audit-отчете.
+    """
+    # индекс (filepath, имя_символа) -> FunctionMetrics для O(1)-поиска совпадений
+    fn_by_location: Dict[Tuple[str, str], FunctionMetrics] = {
+        (fn.filepath, fn.name): fn for fn in fn_index.values()
+    }
+
+    events: List[ViolationEvent] = []
+    for entry in dead_entries:
+        if entry.filepath is None:
+            continue
+        # последний сегмент qualified_name — имя символа (функции или метода)
+        symbol = entry.qualified_name.rsplit(".", 1)[-1]
+        fn = fn_by_location.get((entry.filepath, symbol))
+        # только если нашли соответствующую функцию с CC строго выше порога
+        if fn is None or fn.cc <= cc_threshold:
+            continue
+        events.append(ViolationEvent(
+            id=_make_event_id("DEAD_CODE_RISK", entry.qualified_name),
+            type="DEAD_CODE_RISK",
+            severity="error",  # мертвый высокосложный код всегда критичен
+            location=ViolationLocation(
+                filepath=entry.filepath,
+                name=entry.qualified_name,
+                layer=entry.layer,
+            ),
+            metrics=ViolationMetrics(cc=fn.cc, rank=fn.rank),
+            evidence=[
+                EvidenceItem(source="pyan3", details={
+                    "qualified_name": entry.qualified_name,
+                    "confidence": entry.confidence,
+                }),
+                EvidenceItem(source="radon", details={
+                    "function_id": fn.function_id,
+                    "cc": fn.cc,
+                    "rank": fn.rank,
+                    "lineno": fn.lineno,
+                }),
+            ],
+            strength="strong",
+        ))
+    return events
+
+
+def _emit_dead_layer_node_events(
+    dead_entries: List[DeadCodeEntry],
+    layer_index: Dict[str, LayerMetrics],
+) -> List[ViolationEvent]:
+    """
+    DEAD_LAYER_NODE: мертвый узел (pyan3) в слое с активными архитектурными нарушениями.
+    Накопленный технический долг: мертвый код в слое, который уже нарушает контракты.
+    Счётчики LayerMetrics заполняются _merge_layer_violations — вызывать только после него.
+    """
+    events: List[ViolationEvent] = []
+    for entry in dead_entries:
+        if entry.layer is None:
+            continue
+        lm = layer_index.get(entry.layer)
+        if lm is None:
+            continue
+        # слой должен иметь хотя бы одно нарушение любого типа
+        if (lm.sdp_violation_count == 0 and lm.slp_violation_count == 0
+                and lm.linter_broken_imports == 0):
+            continue
+        events.append(ViolationEvent(
+            id=_make_event_id("DEAD_LAYER_NODE", entry.qualified_name),
+            type="DEAD_LAYER_NODE",
+            severity="error" if entry.confidence == "high" else "warning",
+            location=ViolationLocation(
+                filepath=entry.filepath,
+                name=entry.qualified_name,
+                layer=entry.layer,
+            ),
+            metrics=ViolationMetrics(instability=lm.instability),
+            evidence=[
+                EvidenceItem(source="pyan3", details={
+                    "qualified_name": entry.qualified_name,
+                    "confidence": entry.confidence,
+                }),
+                EvidenceItem(source="import_graph", details={
+                    "layer": entry.layer,
+                    "sdp_violation_count": lm.sdp_violation_count,
+                    "slp_violation_count": lm.slp_violation_count,
+                    "linter_broken_imports": lm.linter_broken_imports,
+                }),
+            ],
+            strength="strong",
+        ))
+    return events
+
+
+def _emit_unstable_cohesion_layer_events(
+    layer_index: Dict[str, LayerMetrics],
+    class_index: Dict[str, ClassMetrics],
+    module_to_layer_map: Dict[str, str],
+    lcom4_threshold: int,
+) -> List[ViolationEvent]:
+    """
+    UNSTABLE_COHESION_LAYER: слой с SDP-нарушениями И низко-связными классами.
+    Совмещение нарушения SRP (через LCOM4) и SDP (через направление зависимостей) в одном слое.
+    Событие уровня слоя — дополняет LOW_COHESION_CONTRACT_LAYER (уровень класса + контракты).
+    Счётчики LayerMetrics заполняются _merge_layer_violations — вызывать только после него.
+    """
+    # группируем низко-связные классы по слоям через filepath -> module -> layer
+    low_cohesion_by_layer: Dict[str, List[ClassMetrics]] = defaultdict(list)
+    for cls in class_index.values():
+        if cls.excluded_from_aggregation or cls.lcom4 is None or cls.lcom4 <= lcom4_threshold:
+            continue
+        layer = _resolve_module_to_layer(_filepath_to_module(cls.filepath), module_to_layer_map)
+        if layer:
+            low_cohesion_by_layer[layer].append(cls)
+
+    events: List[ViolationEvent] = []
+    for layer_name, lm in layer_index.items():
+        if lm.sdp_violation_count == 0:
+            continue
+        low_cohesion_classes = low_cohesion_by_layer.get(layer_name, [])
+        if not low_cohesion_classes:
+            continue
+        # класс с наивысшим LCOM4 — наиболее показательный пример для отчета
+        worst = max(low_cohesion_classes, key=lambda c: c.lcom4 or 0.0)
+        events.append(ViolationEvent(
+            id=_make_event_id("UNSTABLE_COHESION_LAYER", layer_name),
+            type="UNSTABLE_COHESION_LAYER",
+            severity="error",  # сочетание SRP + SDP нарушений в одном слое всегда критично
+            location=ViolationLocation(layer=layer_name),
+            metrics=ViolationMetrics(
+                lcom4=worst.lcom4,
+                instability=lm.instability,
+            ),
+            evidence=[
+                EvidenceItem(source="cohesion", details={
+                    "low_cohesion_class_count": len(low_cohesion_classes),
+                    "worst_class_name": worst.class_name,
+                    "worst_class_lcom4": worst.lcom4,
+                    "worst_class_filepath": worst.filepath,
+                }),
+                EvidenceItem(source="import_graph", details={
+                    "layer": layer_name,
+                    "sdp_violation_count": lm.sdp_violation_count,
+                    "instability": lm.instability,
+                }),
+            ],
+            strength="strong",
+        ))
+    return events
+
+
+def _emit_low_mi_violating_layer_events(
+    file_index: Dict[str, FileMetrics],
+    layer_index: Dict[str, LayerMetrics],
+    module_to_layer_map: Dict[str, str],
+) -> List[ViolationEvent]:
+    """
+    LOW_MI_VIOLATING_LAYER: файл с низким MI (rank B или C) в слое с нарушениями контрактов.
+    Труднообслуживаемый файл в архитектурно несоответствующем слое — приоритет для рефакторинга.
+    Счётчики LayerMetrics заполняются _merge_layer_violations — вызывать только после него.
+    """
+    events: List[ViolationEvent] = []
+    for fm in file_index.values():
+        if fm.mi_rank not in ("B", "C"):
+            continue
+        layer = _resolve_module_to_layer(_filepath_to_module(fm.filepath), module_to_layer_map)
+        if layer is None:
+            continue
+        lm = layer_index.get(layer)
+        # нарушение только при наличии broken imports в слое данного файла
+        if lm is None or lm.linter_broken_imports == 0:
+            continue
+        events.append(ViolationEvent(
+            id=_make_event_id("LOW_MI_VIOLATING_LAYER", fm.filepath),
+            type="LOW_MI_VIOLATING_LAYER",
+            severity="error" if fm.mi_rank == "C" else "warning",
+            location=ViolationLocation(filepath=fm.filepath, layer=layer),
+            metrics=ViolationMetrics(mi=fm.mi, rank=fm.mi_rank),
+            evidence=[
+                EvidenceItem(source="radon", details={
+                    "filepath": fm.filepath,
+                    "mi": fm.mi,
+                    "rank": fm.mi_rank,
+                }),
+                EvidenceItem(source="import_linter", details={
+                    "layer": layer,
+                    "linter_broken_imports": lm.linter_broken_imports,
+                }),
+            ],
+            strength="strong",
+        ))
+    return events
+
+
+def _emit_low_cohesion_contract_layer_events(
+    class_index: Dict[str, ClassMetrics],
+    layer_index: Dict[str, LayerMetrics],
+    module_to_layer_map: Dict[str, str],
+    lcom4_threshold: int,
+) -> List[ViolationEvent]:
+    """
+    LOW_COHESION_CONTRACT_LAYER: низко-связный класс (Cohesion) в слое
+    с нарушениями явных контрактов (ImportLinter).
+    Нарушение SRP (через LCOM4) в слое с явными контрактными нарушениями.
+    Событие уровня класса — дополняет UNSTABLE_COHESION_LAYER (уровень слоя + SDP).
+    Счётчики LayerMetrics заполняются _merge_layer_violations — вызывать только после него.
+    """
+    events: List[ViolationEvent] = []
+    for cls in class_index.values():
+        if cls.excluded_from_aggregation or cls.lcom4 is None or cls.lcom4 <= lcom4_threshold:
+            continue
+        layer = _resolve_module_to_layer(_filepath_to_module(cls.filepath), module_to_layer_map)
+        if layer is None:
+            continue
+        lm = layer_index.get(layer)
+        # нарушение только при наличии broken imports в слое данного класса
+        if lm is None or lm.linter_broken_imports == 0:
+            continue
+        events.append(ViolationEvent(
+            id=_make_event_id("LOW_COHESION_CONTRACT_LAYER", cls.filepath, cls.class_name),
+            type="LOW_COHESION_CONTRACT_LAYER",
+            severity="error" if cls.lcom4 >= 3 else "warning",
+            location=ViolationLocation(
+                filepath=cls.filepath,
+                lineno=cls.lineno,
+                class_name=cls.class_name,
+                layer=layer,
+            ),
+            metrics=ViolationMetrics(lcom4=cls.lcom4),
+            evidence=[
+                EvidenceItem(source="cohesion", details={
+                    "cohesion_score": cls.lcom4,
+                    "cohesion_score_norm": cls.lcom4_norm,
+                    "methods_count": cls.methods_count,
+                    "class_kind": cls.class_kind,
+                }),
+                EvidenceItem(source="import_linter", details={
+                    "layer": layer,
+                    "linter_broken_imports": lm.linter_broken_imports,
                 }),
             ],
             strength="strong",
