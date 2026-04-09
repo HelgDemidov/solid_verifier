@@ -10,7 +10,7 @@
 #   T1 — LAYER_VIOLATION: ImportLinter + ImportGraph на одной паре -> 1 событие, 2 evidence, strength=strong
 #   T2 — Кросс-метрики: class_lcom4 на FunctionMetrics, OVERLOADED_CLASS
 #   T3 — Graceful degradation: pyan3 отсутствует -> dead_code=[], adapters_failed содержит "pyan3"
-#   T4 — HIGH_CC_METHOD severity: CC=16 -> severity=error
+#   T4 — HIGH_CC_METHOD severity: CC=16 -> error, CC=11 -> warning, CC=CC_THRESHOLD -> no event
 #   T5 — DEAD_CODE_NODE confidence: collision_rate<0.35 -> error; >=0.35 -> warning
 #   T6 — IMPORT_CYCLE: двунаправленное ребро -> событие IMPORT_CYCLE
 #   T7 — IMPORT_CYCLE false negative (xfail): 3-узловой цикл не обнаруживается (Phase 1)
@@ -20,6 +20,7 @@
 import pytest
 
 from solid_dashboard.report_aggregator import aggregate_results
+from solid_dashboard.defaults import CC_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -247,13 +248,14 @@ def test_t3_pyan3_absent_graceful_degradation():
 
 
 # ---------------------------------------------------------------------------
-# T4 — HIGH_CC_METHOD severity: CC=16 -> error
+# T4 — HIGH_CC_METHOD severity: CC=16 -> error, CC=11 -> warning, CC=threshold -> no event
 # ---------------------------------------------------------------------------
 
 def test_t4_high_cc_method_severity():
     """
     Radon item с CC=16 должен породить HIGH_CC_METHOD с severity=error.
-    CC=11 (граничное значение) -> severity=warning.
+    CC=11 (первое значение выше порога) -> severity=warning.
+    CC=CC_THRESHOLD (ровно 10) -> событие не создается (граница: равенство порогу не нарушение).
     """
     # CC=16 -> error
     context_error = {"radon": _radon_context(complexity=16)}
@@ -265,13 +267,21 @@ def test_t4_high_cc_method_severity():
     assert cc_events[0]["evidence"][0]["source"] == "radon"
     assert cc_events[0]["strength"] == "weak"
 
-    # CC=11 -> warning
+    # CC=11 -> warning (первое значение строго выше CC_THRESHOLD=10)
     context_warning = {"radon": _radon_context(complexity=11)}
     result_warning = aggregate_results(context_warning, _base_config())
     cc_events_w = [v for v in result_warning["violations"] if v["type"] == "HIGH_CC_METHOD"]
     assert len(cc_events_w) == 1
     assert cc_events_w[0]["severity"] == "warning", (
         f"CC=11 should produce severity=warning, got {cc_events_w[0]['severity']}")
+
+    # CC=CC_THRESHOLD (ровно 10) -> нет события: граница не является нарушением
+    context_boundary = {"radon": _radon_context(complexity=CC_THRESHOLD)}
+    result_boundary = aggregate_results(context_boundary, _base_config())
+    cc_events_b = [v for v in result_boundary["violations"] if v["type"] == "HIGH_CC_METHOD"]
+    assert len(cc_events_b) == 0, (
+        f"CC={CC_THRESHOLD} (exact threshold) must NOT produce a HIGH_CC_METHOD event, "
+        f"got {len(cc_events_b)} event(s). Invariant: only cc > CC_THRESHOLD triggers a violation.")
 
 
 # ---------------------------------------------------------------------------

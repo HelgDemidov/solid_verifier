@@ -426,9 +426,20 @@ def _make_event_id(event_type: str, *key_parts: str) -> str:
     return "::".join([event_type] + list(key_parts))
 
 
-def _emit_cc_events(fns, cc_threshold):
+def _emit_cc_events(fns: List[FunctionMetrics], cc_threshold: int) -> List[ViolationEvent]:
+    """
+    Emits HIGH_CC_METHOD events for functions/methods where CC strictly exceeds cc_threshold.
+
+    Boundary invariant: cc == cc_threshold does NOT produce an event.
+    Only cc > cc_threshold triggers a violation.
+
+    Severity scale:
+      cc > 15  -> error   (high cognitive load, refactoring required)
+      cc > threshold (and <= 15) -> warning  (elevated complexity, worth reviewing)
+    """
     events = []
     for fn in fns:
+        # строго больше порога — равенство порогу нарушением не является
         if fn.cc <= cc_threshold:
             continue
         events.append(ViolationEvent(
