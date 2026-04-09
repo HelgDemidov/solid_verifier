@@ -20,6 +20,7 @@ import json
 import warnings
 from pathlib import Path
 from typing import Dict, Any, List
+from solid_dashboard.defaults import CC_THRESHOLD  # порог CC из единого источника истины
 from solid_dashboard.interfaces.analyzer import IAnalyzer  # явный импорт интерфейса
 
 lizard = None
@@ -80,7 +81,8 @@ class RadonAdapter(IAnalyzer):
                 if block.get("type") in ("function", "method"):
                     complexity = block.get("complexity", 0)
                     total_cc += complexity
-                    if complexity > 10:
+                    # используем CC_THRESHOLD из defaults.py вместо магического числа
+                    if complexity > CC_THRESHOLD:
                         high_complexity_count += 1
 
                     items.append({

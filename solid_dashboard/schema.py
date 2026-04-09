@@ -80,7 +80,7 @@ class CohesionResult(BaseModel):  # Зарезервировано для Report
 class ComplexitySummary(BaseModel):
     total_items: int = 0
     mean_cc: float = 0.0
-    high_complexity_count: int = 0       # CC > CC_THRESHOLD (= 10, hardcoded)
+    high_complexity_count: int = 0       # CC > CC_THRESHOLD (see defaults.py)
     rank_distribution: Dict[str, int] = {}
 
 
@@ -137,7 +137,7 @@ class FileMetrics(BaseModel):
     function_count: int = 0
     mean_cc: float = 0.0
     max_cc: int = 0
-    high_cc_count: int = 0                   # functions with CC > CC_THRESHOLD
+    high_cc_count: int = 0                   # functions with CC > CC_THRESHOLD (see defaults.py)
     class_count: int = 0                     # from Cohesion classes in same file
 
 

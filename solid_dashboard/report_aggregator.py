@@ -17,6 +17,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
+from solid_dashboard.defaults import CC_THRESHOLD, LCOM4_THRESHOLD, DEAD_CODE_CONFIDENCE_CUTOFF
 from solid_dashboard.schema import (
     AggregatedReport,
     AggregatedSummary,
@@ -43,7 +44,7 @@ from solid_dashboard.schema import (
 # Module-level constants
 # ---------------------------------------------------------------------------
 
-CC_THRESHOLD: int = 10
+# CC_THRESHOLD и DEAD_CODE_CONFIDENCE_CUTOFF импортированы из defaults.py
 _ADAPTER_KEYS: Tuple[str, ...] = ("radon", "cohesion", "import_graph", "import_linter", "pyan3")
 _SEVERITY_RANK: Dict[str, int] = {"error": 2, "warning": 1, "info": 0}
 
@@ -58,7 +59,7 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
 
     Config keys consumed:
       cohesion_threshold (default 1), layers, utility_layers, layer_order, package_root.
-    CC threshold = CC_THRESHOLD (module constant = 10, NOT from config).
+    CC threshold = CC_THRESHOLD (from defaults.py = 10, NOT from config).
     Returns AggregatedReport-shaped dict; always valid regardless of missing adapters.
     Validate with: AggregatedReport.model_validate(result)
     """
@@ -66,7 +67,7 @@ def aggregate_results(context: Dict[str, Any], config: Dict[str, Any]) -> Dict[s
         config = {}
 
     config_defaults_used: bool = not bool(config)
-    lcom4_threshold: int = int(config.get("cohesion_threshold", 1))
+    lcom4_threshold: int = int(config.get("cohesion_threshold", LCOM4_THRESHOLD))
 
     adapters_succeeded: List[str] = []
     adapters_failed: List[str] = []
@@ -263,7 +264,8 @@ def _normalize_import_linter(raw):
 
 def _normalize_pyan3(raw):
     collision_rate = float(raw.get("collision_rate", 0.0))
-    confidence = "low" if collision_rate >= 0.35 else "high"
+    # используем DEAD_CODE_CONFIDENCE_CUTOFF из defaults.py вместо магического числа 0.35
+    confidence = "low" if collision_rate >= DEAD_CODE_CONFIDENCE_CUTOFF else "high"
     dead = [DeadCodeEntry(dead_id=q, qualified_name=q, confidence=confidence)
             for q in raw.get("dead_nodes", [])]
     return raw.get("nodes", []), dead
@@ -681,18 +683,18 @@ def _deduplicate_violations(violations: List[ViolationEvent]) -> List[ViolationE
         if existing is None:
             merged[event.id] = event
         else:
-            # Merge evidence: add entries with sources not already present
+            # объединяем evidence — добавляем источники, которых ещё нет
             existing_sources = {e.source for e in existing.evidence}
             for ev in event.evidence:
                 if ev.source not in existing_sources:
                     existing.evidence.append(ev)
                     existing_sources.add(ev.source)
 
-            # Upgrade severity to max
+            # повышаем severity до максимального из двух событий
             if _SEVERITY_RANK.get(event.severity, 0) > _SEVERITY_RANK.get(existing.severity, 0):
                 existing.severity = event.severity
 
-            # Upgrade strength if now multi-source
+            # если теперь несколько источников — strength становится strong
             if len(existing.evidence) >= 2:
                 existing.strength = "strong"
 
@@ -729,6 +731,7 @@ def _compute_summary(
     complexity = ComplexitySummary(
         total_items=len(all_cc),
         mean_cc=round(sum(all_cc) / len(all_cc), 2) if all_cc else 0.0,
+        # CC_THRESHOLD импортирован из defaults.py
         high_complexity_count=sum(1 for cc in all_cc if cc > CC_THRESHOLD),
         rank_distribution=dict(rank_dist_cc),
     )
