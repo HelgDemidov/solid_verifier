@@ -622,12 +622,26 @@ def _detect_import_cycles(edges: List[Dict[str, Any]]) -> List[ViolationEvent]:
 
 def _merge_layer_violations(graph_violations, contract_violations, layer_index, module_to_layer_map):
     """
-    Merges ImportGraph + ImportLinter violations per (from_layer, to_layer) key.
-    Updates LayerMetrics counters for _compute_summary.
-    See SOLID_audit.md §3.3 Rule D1 for full merge semantics.
+    Объединяет нарушения ImportGraph + ImportLinter по ключу (from_layer, to_layer).
+    Обновляет счётчики LayerMetrics для _compute_summary.
+
+    Используются два независимых бакета для SDP-001 и SLP-001:
+    - sdp_bucket: одна запись на пару слоев (SDP вытесняет предыдущую).
+    - slp_bucket: одна запись на пару, хранится запись с максимальным skip_distance.
+
+    Логика генерации событий (linter=L, sdp=S, slp=P):
+      L+S      -> 1 LAYER_VIOLATION,  evidence=[linter, sdp_graph],        strength=strong
+      L+P      -> 1 LAYER_VIOLATION,  evidence=[linter, slp_graph],        strength=strong
+      L+S+P    -> 1 LAYER_VIOLATION,  evidence=[linter, sdp_graph, slp_graph], strength=strong
+      L only   -> 1 LAYER_VIOLATION,  evidence=[linter],                   strength=weak
+      S only   -> 1 SDP_VIOLATION,    evidence=[sdp_graph],                strength=weak
+      P only   -> 1 SLP_VIOLATION,    evidence=[slp_graph],                strength=weak
+      S+P only -> 2 events: SDP_VIOLATION + SLP_VIOLATION (distinct IDs)
     """
     linter_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    graph_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    # Разделяем SDP и SLP в независимые бакеты, чтобы SLP не подавлялся SDP
+    sdp_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    slp_bucket: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
     for contract in contract_violations:
         contract_name = contract.get("contract_name", "")
@@ -650,58 +664,94 @@ def _merge_layer_violations(graph_violations, contract_violations, layer_index, 
         if not from_layer or not to_layer:
             continue
         key = (from_layer, to_layer)
-        if key not in graph_bucket or rule == "SDP-001":
-            graph_bucket[key] = {
-                "rule": rule, "severity": v.get("severity", "error"),
-                "instability": v.get("instability"), "dep_instability": v.get("dep_instability"),
-                "skip_distance": v.get("skip_distance"), "tier": v.get("tier"), "dep_tier": v.get("dep_tier"),
-            }
-        if from_layer in layer_index:
-            lm = layer_index[from_layer]
-            if rule == "SDP-001":
-                lm.sdp_violation_count += 1
-            elif rule == "SLP-001":
-                lm.slp_violation_count += 1
+        entry = {
+            "rule": rule, "severity": v.get("severity", "error"),
+            "instability": v.get("instability"), "dep_instability": v.get("dep_instability"),
+            "skip_distance": v.get("skip_distance"), "tier": v.get("tier"), "dep_tier": v.get("dep_tier"),
+        }
+        if rule == "SDP-001":
+            # для SDP последняя запись побеждает — на практике одна запись на пару
+            sdp_bucket[key] = entry
+            if from_layer in layer_index:
+                layer_index[from_layer].sdp_violation_count += 1
+        elif rule == "SLP-001":
+            # для SLP храним наихудшую (максимальный skip_distance) на пару
+            existing_slp = slp_bucket.get(key)
+            new_skip = entry.get("skip_distance") or 0
+            old_skip = (existing_slp.get("skip_distance") or 0) if existing_slp else -1
+            if existing_slp is None or new_skip > old_skip:
+                slp_bucket[key] = entry
+            if from_layer in layer_index:
+                layer_index[from_layer].slp_violation_count += 1
 
     events: List[ViolationEvent] = []
-    for key in sorted(set(linter_bucket) | set(graph_bucket)):
+    all_keys = sorted(set(linter_bucket) | set(sdp_bucket) | set(slp_bucket))
+
+    for key in all_keys:
         from_layer, to_layer = key
         linter_ev = linter_bucket.get(key)
-        graph_ev = graph_bucket.get(key)
+        sdp_ev = sdp_bucket.get(key)
+        slp_ev = slp_bucket.get(key)
 
-        evidence: List[EvidenceItem] = []
-        if linter_ev:
-            evidence.append(EvidenceItem(source="import_linter", details={
-                "contract_name": linter_ev["contract_name"],
-                "broken_imports_count": len(linter_ev["broken_imports"]),
-                "broken_imports": linter_ev["broken_imports"],
-            }))
-        if graph_ev:
-            evidence.append(EvidenceItem(source="import_graph",
-                details={k: v for k, v in graph_ev.items() if v is not None}))
-
-        both = linter_ev is not None and graph_ev is not None
         if linter_ev is not None:
-            event_type = "LAYER_VIOLATION"
-            graph_sev = graph_ev["severity"] if graph_ev else "error"
+            # контракт нарушен: емитим один LAYER_VIOLATION со всеми доступными evidence
+            evidence: List[EvidenceItem] = [
+                EvidenceItem(source="import_linter", details={
+                    "contract_name": linter_ev["contract_name"],
+                    "broken_imports_count": len(linter_ev["broken_imports"]),
+                    "broken_imports": linter_ev["broken_imports"],
+                }),
+            ]
+            if sdp_ev:
+                evidence.append(EvidenceItem(source="import_graph",
+                    details={k: v for k, v in sdp_ev.items() if v is not None}))
+            if slp_ev:
+                # добавляем SLP как отдельный import_graph evidence внутри LAYER_VIOLATION
+                evidence.append(EvidenceItem(source="import_graph",
+                    details={k: v for k, v in slp_ev.items() if v is not None}))
+            # северитет: max от linter (error) и graph
+            graph_sev = (sdp_ev or slp_ev or {}).get("severity", "error")
             severity = "error" if _SEVERITY_RANK.get(graph_sev, 0) >= _SEVERITY_RANK["warning"] else "warning"
-        elif graph_ev is not None:
-            event_type = "SDP_VIOLATION" if graph_ev["rule"] == "SDP-001" else "SLP_VIOLATION"
-            severity = graph_ev["severity"]
+            any_graph = sdp_ev is not None or slp_ev is not None
+            events.append(ViolationEvent(
+                id=_make_event_id("LAYER_VIOLATION", from_layer, to_layer),
+                type="LAYER_VIOLATION", severity=severity,
+                location=ViolationLocation(from_layer=from_layer, to_layer=to_layer),
+                metrics=ViolationMetrics(
+                    instability=sdp_ev.get("instability") if sdp_ev else None,
+                    dep_instability=sdp_ev.get("dep_instability") if sdp_ev else None,
+                    skip_distance=slp_ev.get("skip_distance") if slp_ev else None,
+                ),
+                evidence=evidence, strength="strong" if any_graph else "weak",
+            ))
         else:
-            continue
-
-        events.append(ViolationEvent(
-            id=_make_event_id(event_type, from_layer, to_layer),
-            type=event_type, severity=severity,
-            location=ViolationLocation(from_layer=from_layer, to_layer=to_layer),
-            metrics=ViolationMetrics(
-                instability=graph_ev.get("instability") if graph_ev else None,
-                dep_instability=graph_ev.get("dep_instability") if graph_ev else None,
-                skip_distance=graph_ev.get("skip_distance") if graph_ev else None,
-            ),
-            evidence=evidence, strength="strong" if both else "weak",
-        ))
+            # контракт чист: емитим SDP и/или SLP независимо — это возвращает события которые раньше подавлялись
+            if sdp_ev is not None:
+                events.append(ViolationEvent(
+                    id=_make_event_id("SDP_VIOLATION", from_layer, to_layer),
+                    type="SDP_VIOLATION", severity=sdp_ev["severity"],
+                    location=ViolationLocation(from_layer=from_layer, to_layer=to_layer),
+                    metrics=ViolationMetrics(
+                        instability=sdp_ev.get("instability"),
+                        dep_instability=sdp_ev.get("dep_instability"),
+                    ),
+                    evidence=[EvidenceItem(source="import_graph",
+                        details={k: v for k, v in sdp_ev.items() if v is not None})],
+                    strength="weak",
+                ))
+            if slp_ev is not None:
+                # SLP_VIOLATION для этой же пары если SDP тоже есть: оба события имеют разные ID
+                events.append(ViolationEvent(
+                    id=_make_event_id("SLP_VIOLATION", from_layer, to_layer),
+                    type="SLP_VIOLATION", severity=slp_ev["severity"],
+                    location=ViolationLocation(from_layer=from_layer, to_layer=to_layer),
+                    metrics=ViolationMetrics(
+                        skip_distance=slp_ev.get("skip_distance"),
+                    ),
+                    evidence=[EvidenceItem(source="import_graph",
+                        details={k: v for k, v in slp_ev.items() if v is not None})],
+                    strength="weak",
+                ))
     return events
 
 
