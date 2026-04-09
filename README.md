@@ -10,7 +10,7 @@ That is how the concept of the SOLID Verifier emerged. For object-oriented Pytho
 
 ***
 
-`solid_dashboard` is a config-driven CLI tool that analyzes Python projects for adherence to SOLID principles and layered architecture. It runs a pipeline of static analyzers, computes metrics, checks architectural contracts, and — optionally — deepens OCP/LSP analysis with an LLM layer. The result is written into a machine-readable JSON report (`solid_report.log`).
+`solid_dashboard` is a config-driven CLI tool that analyzes Python projects for adherence to SOLID principles and layered architecture. It runs a pipeline of static analyzers, computes metrics, checks architectural contracts, and — optionally — deepens OCP/LSP analysis with an LLM layer. Results from all static adapters are aggregated by `report_aggregator.py` into a single structured report (`aggregated_report`) and written into the machine-readable file `solid_report.log` (JSON format).
 
 The tool is project-agnostic: it can be reused across different Python codebases, not only within the Scopus Search API project.
 
@@ -36,6 +36,7 @@ The tool is project-agnostic: it can be reused across different Python codebases
   - A two-level Anti-Corruption Layer (ACL-A + ACL-B) protects the pipeline from malformed model responses.
   - LLM results are normalized into the same `Finding` format as static and heuristic results.
 - **Extensible pipeline** through a clear `IAnalyzer` interface explicitly implemented by all static adapters.
+- **Result aggregation and deduplication** via `report_aggregator.py`: results from all five static adapters are normalized into a unified schema (Pydantic models in `schema.py`), enriched with cross-adapter metrics, deduplicated by event ID with severity upgraded to the maximum, and stored in `results["aggregated_report"]` and `context["aggregated_report"]`. Existing context keys are not overwritten (backward compatibility). Aggregator failure is isolated: the pipeline continues and returns `{"error": ...}` in the `aggregated_report` field.
 - **Machine-readable report** in `solid_report.log` (JSON) and planned visual HTML dashboards.
 
 ***
@@ -63,7 +64,7 @@ The LLM layer is implemented separately from `IAnalyzer` and is invoked directly
   **`radon cc --json`** — produces a normalized flat list of records per function/method: name, type (`function`/`method`), cyclomatic complexity, rank (A–F), line number, and file path. Items are sorted by complexity descending.
   **`radon mi --json`** — produces a per-file Maintainability Index report (MI score 0–100, rank A/B/C). Aggregated into a `maintainability` sub-object with `total_files`, `mean_mi`, `low_mi_count` (files ranked C, i.e. MI < 10), and a `files` list sorted by MI ascending (worst first). **MI failure is fully isolated:** any subprocess or parse error returns an empty `{}` for `maintainability` and never interrupts the CC result.
 
-  Additionally, the adapter integrates `lizard` solely to retrieve `parameter_count` — the number of parameters per function or method (including `self` for methods), which is not available in standard radon output. Metrics computed by both tools (e.g., CC) are intentionally deduplicated, with radon taking precedence. Normalization of `parameter_count` is deliberately deferred to the aggregation layer.
+  Additionally, the adapter integrates `lizard` solely to retrieve `parameter_count` — the number of parameters per function or method (including `self` for methods), which is not available in standard radon output. Metrics computed by both tools (e.g., CC) are intentionally deduplicated, with radon taking precedence. Normalization of `parameter_count` is deliberately deferred to the aggregation layer. In `report_aggregator.py`, the fact that lizard was used is recorded in `ReportMeta.lizard_used` based on the `context["radon"]["lizard_used"]` flag.
 
 - **`cohesion_adapter.py`**  
   A custom, dependency-free implementation of the **LCOM4** (Lack of Cohesion of Methods 4) metric built entirely on Python's built-in `ast`. The adapter consists of two collaborating components: `CohesionAdapter` (the main adapter implementing `IAnalyzer`) and the helper `class_classifier.py` (semantic class classification). The algorithm operates in two passes:
@@ -87,7 +88,35 @@ The LLM layer is implemented separately from `IAnalyzer` and is invoked directly
 - **`pyan3_adapter.py`**  
   Uses `pyan3` to build a static call graph and identify potentially unused code. The key architectural decision is running `pyan3` via `subprocess` with the `cwd` parameter — without `os.chdir` — keeping the adapter stateless and project-agnostic. Python files are collected manually with `ignore_dirs` filtering, excluding `.venv`, tests, and tooling directories. The adapter implements a **two-pass parsing model** over `pyan3`'s text output: the first pass detects blocks with name collisions (identified by duplicate `[U]`-entries within a block before deduplication); the second pass builds the graph and assigns a `"high"` / `"low"` confidence label to each edge. 
   
-  Confidence is determined solely by the source block: an edge receives `"low"` if its source is marked as suspicious; the target node has no effect on confidence. Nodes are categorised into three groups: `root_nodes` (no incoming edges, has outgoing — entry points), `dead_nodes` (no edges at all — genuinely unused code), and normally connected nodes.
+  Confidence is determined solely by the source block: an edge receives `"low"` if its source is marked as suspicious; the target node has no effect on confidence. Nodes are categorised into three groups: `root_nodes` (no incoming edges, has outgoing — entry points), `dead_nodes` (no edges at all — genuinely unused code), and normally connected nodes. In the aggregator, `confidence` for `dead_nodes` is derived from the `collision_rate` field in the raw adapter output: when `collision_rate ≥ 0.35` all dead nodes are marked `confidence="low"`; below that threshold they receive `confidence="high"`.
+
+### Report Aggregator
+
+The `report_aggregator.py` module is the final stage of the static pipeline. It is called by `pipeline.py` **after** all static adapters have run and **before** the LLM layer. Public entry point: `aggregate_results(context, config)`.
+
+**Architecture: 9 sequential steps**
+
+| Step | Name | What happens |
+|------|------|--------------|
+| 1 | Normalize | Each adapter is normalized by a dedicated `_normalize_*` handler into typed Pydantic models (`FunctionMetrics`, `ClassMetrics`, `LayerMetrics`, `DeadCodeEntry`). If an adapter returned `{"error": ...}` or `None`, it is added to `adapters_failed` and steps 2–9 continue uninterrupted (graceful degradation). **Important:** `import_linter` is marked failed **only** when the `"error"` key is present, **not** when `is_success=False` — a broken contract is a normal operating state that carries violation data for aggregation. |
+| 2 | Index | Four lookup indexes are built: `file_index`, `class_index`, `fn_index`, `layer_index` — dictionaries with stable identifiers as keys for O(1) access in subsequent steps. |
+| 3 | Cross-resolve | Methods are bound to their classes via `_resolve_function_to_class` (line-range matching within the same file). Layers receive a `tier` value from the `layer_order` config key. A `module_to_layer_map` is built to resolve concrete modules to their architectural layer names. |
+| 4 | Denormalize | Cross-adapter metrics are propagated downward: `file_mi` into functions and classes, `class_lcom4` into functions, `max_method_cc` / `mean_method_cc` into classes. |
+| 5 | Single-source events | Violation events are emitted from a single source: `HIGH_CC_METHOD`, `LOW_MI_FILE`, `LOW_COHESION_CLASS`, `DEAD_CODE_NODE`, `IMPORT_CYCLE`. |
+| 6 | Multi-source events | `LAYER_VIOLATION` (import_graph + import_linter, `strength="strong"`), `SDP_VIOLATION`, `SLP_VIOLATION`, `OVERLOADED_CLASS` (cohesion + radon, `strength="strong"`) — events backed by evidence from two adapters simultaneously. |
+| 7 | Deduplicate | Events are deduplicated by `id` (type + location key parts): when IDs collide, evidence lists are merged, severity is upgraded to the maximum, and strength is promoted to `"strong"` when ≥ 2 sources are present. The final list is sorted: `error` first, then `warning`, with `type` ASC within each group. |
+| 8 | Summary | Summary sub-sections are computed: `ComplexitySummary`, `MaintainabilitySummary`, `CohesionSummary`, `ImportsSummary`, `DeadCodeSummary`. CC threshold = 10 (module-level constant `CC_THRESHOLD`); LCOM4 threshold is read from `config["cohesion_threshold"]` (default 1). |
+| 9 | Assemble | The final `AggregatedReport` Pydantic object is built from `meta`, `summary`, `entities`, `violations`, and `dead_code`, then serialized via `.model_dump()`. |
+
+**Output schema** is defined in `schema.py` via Pydantic v2. Key types:
+
+- `AggregatedReport` — root container
+- `ReportMeta` — run metadata: `generated_at`, `adapters_succeeded`, `adapters_failed`, `lizard_used`, `config_defaults_used`
+- `EntitiesSection` — normalized entities: `files`, `classes`, `functions`, `layers`
+- `ViolationEvent` — violation event: `id`, `type`, `severity`, `location`, `metrics`, `evidence[]`, `strength`
+- `AggregatedSummary` — aggregate metrics across all dimensions
+
+**Known limitation of the cycle detector (Phase 1):** `_detect_import_cycles` identifies only bidirectional pairs (A→B and B→A simultaneously present). Cycles of length ≥ 3 (A→B→C→A) are silently missed. This is documented in the source code and in `SOLID_audit.md`; a Phase 2 fix using Tarjan's SCC algorithm is planned.
 
 ### LLM Layer: Heuristics and Adapter
 
