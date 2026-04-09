@@ -641,3 +641,320 @@ def test_t12_enrich_dead_code_two_segment_name():
         f"Expected layer=None for module 'app' (not a configured layer), "
         f"got {entry['layer']!r}"
     )
+
+
+# ===========================================================================
+# T13–T17: тесты для 5 кросс-адаптерных событий (Commit feat(aggregator))
+# Стратегия та же: синтетический context, проверка публичного контракта.
+# Существующие T1–T12, T7b, smoke не изменены.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Вспомогательные фабрики для кросс-событий
+# ---------------------------------------------------------------------------
+
+def _radon_low_mi_context(filepath: str = _FP, mi: float = 8.3, rank: str = "C") -> dict:
+    """RadonAdapter output с файлом низкого MI (rank B или C). CC минимален."""
+    return {
+        "total_items": 1, "mean_cc": 2.0, "high_complexity_count": 0,
+        "lizard_used": False,
+        "items": [{"name": "process", "type": "function", "complexity": 2,
+                   "rank": "A", "lineno": 10, "filepath": filepath}],
+        "maintainability": {
+            "total_files": 1, "mean_mi": mi, "low_mi_count": 1 if rank == "C" else 0,
+            "files": [{"filepath": filepath, "mi": mi, "rank": rank}],
+        },
+    }
+
+
+def _graph_with_sdp_violation(violating_layer: str = "services",
+                               dep_layer: str = "models") -> dict:
+    """ImportGraphAdapter output с одним SDP-001 нарушением на указанном слое."""
+    return _graph_context(
+        violations=[{
+            "rule": "SDP-001",
+            "layer": violating_layer,
+            "instability": 0.8,
+            "dependency": dep_layer,
+            "dep_instability": 0.2,
+            "severity": "error",
+            "message": "SDP violation",
+            "evidence": [],
+        }]
+    )
+
+
+def _linter_services_broken() -> dict:
+    """ImportLinter с broken import из services -> models (задает linter_broken_imports на services)."""
+    return _linter_context(
+        broken_imports=[{"importer": "app.services.old_service", "imported": "app.models.paper"}]
+    )
+
+
+# ---------------------------------------------------------------------------
+# T13 — DEAD_CODE_RISK: мертвый узел + высокий CC
+# ---------------------------------------------------------------------------
+
+def test_t13_dead_code_risk_cross_event():
+    """
+    Модульная функция 'app.services.search_service.process' (pyan3 dead) +
+    Radon-функция process в том же файле с CC=16 -> 1 событие DEAD_CODE_RISK,
+    strength=strong, severity=error, evidence от pyan3 И radon.
+
+    Дополнительно: исходное DEAD_CODE_NODE для того же узла НЕ дедуплицируется
+    (другой type-префикс в ID -> оба события присутствуют в violations).
+    """
+    # qualified_name 'app.services.search_service.process':
+    # _enrich_dead_code_entries: module='app.services.search_service', filepath='app/services/search_service.py'
+    # _base_config(): 'app.services' -> 'services'
+    context = {
+        "radon": _radon_context(
+            complexity=16,
+            filepath=_FP,
+            lineno=10,
+            name="process",
+            fn_type="function",  # функция уровня модуля — не метод класса
+        ),
+        "pyan3": _pyan3_context(
+            dead_nodes=["app.services.search_service.process"],
+            collision_rate=0.0,
+        ),
+    }
+
+    result = aggregate_results(context, _base_config())
+    violations = result["violations"]
+
+    # --- DEAD_CODE_RISK ---
+    risk_events = [v for v in violations if v["type"] == "DEAD_CODE_RISK"]
+    assert len(risk_events) == 1, f"Expected 1 DEAD_CODE_RISK, got {len(risk_events)}"
+    ev = risk_events[0]
+    assert ev["strength"] == "strong"
+    assert ev["severity"] == "error"
+    sources = {e["source"] for e in ev["evidence"]}
+    assert sources == {"pyan3", "radon"}, f"Expected sources pyan3+radon, got {sources}"
+    assert ev["metrics"]["cc"] == 16
+    assert ev["location"]["filepath"] == _FP
+
+    # --- DEAD_CODE_NODE для того же узла тоже присутствует (разные ID, не дедуплицируются) ---
+    dead_node_events = [v for v in violations if v["type"] == "DEAD_CODE_NODE"]
+    assert len(dead_node_events) == 1, "DEAD_CODE_NODE must not be deduplicated away by DEAD_CODE_RISK"
+    assert dead_node_events[0]["id"] != risk_events[0]["id"], "IDs must differ"
+
+    # --- Негативный кейс: нет совпадения по (filepath, имя) -> нет DEAD_CODE_RISK ---
+    ctx_no_match = {
+        "radon": _radon_context(complexity=16, name="other_fn"),  # другое имя
+        "pyan3": _pyan3_context(dead_nodes=["app.services.search_service.process"]),
+    }
+    result_no = aggregate_results(ctx_no_match, _base_config())
+    risk_no = [v for v in result_no["violations"] if v["type"] == "DEAD_CODE_RISK"]
+    assert len(risk_no) == 0, "No DEAD_CODE_RISK expected when fn name doesn't match dead node"
+
+
+# ---------------------------------------------------------------------------
+# T14 — DEAD_LAYER_NODE: мертвый узел в слое с нарушениями
+# ---------------------------------------------------------------------------
+
+def test_t14_dead_layer_node_cross_event():
+    """
+    Pyan3 dead node 'app.services.old_service.legacy_fn' (layer='services') +
+    ImportGraph SDP-001 на services (sdp_violation_count=1)
+    -> 1 событие DEAD_LAYER_NODE, strength=strong, location.layer='services'.
+
+    Негативный кейс: dead node в слое с нулевыми счётчиками -> нет события.
+    """
+    context = {
+        "import_graph": _graph_with_sdp_violation(violating_layer="services"),
+        "pyan3": _pyan3_context(
+            dead_nodes=["app.services.old_service.legacy_fn"],
+            collision_rate=0.0,
+        ),
+    }
+
+    result = aggregate_results(context, _base_config())
+    dead_layer = [v for v in result["violations"] if v["type"] == "DEAD_LAYER_NODE"]
+
+    assert len(dead_layer) == 1, f"Expected 1 DEAD_LAYER_NODE, got {len(dead_layer)}"
+    ev = dead_layer[0]
+    assert ev["strength"] == "strong"
+    assert ev["severity"] == "error"  # collision_rate=0 -> confidence=high -> error
+    assert ev["location"]["layer"] == "services"
+    sources = {e["source"] for e in ev["evidence"]}
+    assert sources == {"pyan3", "import_graph"}
+    # детали import_graph должны включать sdp_violation_count
+    graph_details = next(e["details"] for e in ev["evidence"] if e["source"] == "import_graph")
+    assert graph_details["sdp_violation_count"] >= 1
+
+    # --- Негативный кейс: слой без нарушений -> нет DEAD_LAYER_NODE ---
+    ctx_no_violations = {
+        "import_graph": _graph_context(),  # нет violations, все счётчики=0
+        "pyan3": _pyan3_context(dead_nodes=["app.services.old_service.legacy_fn"]),
+    }
+    result_neg = aggregate_results(ctx_no_violations, _base_config())
+    dead_neg = [v for v in result_neg["violations"] if v["type"] == "DEAD_LAYER_NODE"]
+    assert len(dead_neg) == 0, "No DEAD_LAYER_NODE expected when layer has zero violation counters"
+
+
+# ---------------------------------------------------------------------------
+# T15 — UNSTABLE_COHESION_LAYER: SDP-нарушения + низко-связные классы
+# ---------------------------------------------------------------------------
+
+def test_t15_unstable_cohesion_layer_cross_event():
+    """
+    Services layer: SDP-001 нарушение (sdp_violation_count=1) +
+    Cohesion-класс SearchService в app/services с lcom4=2.0
+    -> 1 UNSTABLE_COHESION_LAYER, strength=strong, severity=error,
+       evidence[0].source=cohesion, evidence[1].source=import_graph.
+
+    Негативный кейс: тот же SDP, но lcom4=1.0 (на пороге) -> нет события.
+    """
+    context = {
+        "import_graph": _graph_with_sdp_violation(violating_layer="services"),
+        "cohesion": _cohesion_context(lcom4=2.0, filepath=_FP),  # app/services/search_service.py
+    }
+
+    result = aggregate_results(context, _base_config())
+    unstable = [v for v in result["violations"] if v["type"] == "UNSTABLE_COHESION_LAYER"]
+
+    assert len(unstable) == 1, f"Expected 1 UNSTABLE_COHESION_LAYER, got {len(unstable)}"
+    ev = unstable[0]
+    assert ev["strength"] == "strong"
+    assert ev["severity"] == "error"
+    assert ev["location"]["layer"] == "services"
+    sources = {e["source"] for e in ev["evidence"]}
+    assert sources == {"cohesion", "import_graph"}
+    # cohesion evidence должен содержать low_cohesion_class_count
+    coh_details = next(e["details"] for e in ev["evidence"] if e["source"] == "cohesion")
+    assert coh_details["low_cohesion_class_count"] >= 1
+    assert coh_details["worst_class_name"] == "SearchService"
+
+    # --- Негативный кейс: lcom4=1.0 (ровно на пороге, не нарушение) ---
+    ctx_ok_cohesion = {
+        "import_graph": _graph_with_sdp_violation(violating_layer="services"),
+        "cohesion": _cohesion_context(lcom4=1.0, filepath=_FP),  # не нарушение
+    }
+    result_neg = aggregate_results(ctx_ok_cohesion, _base_config())
+    unstable_neg = [v for v in result_neg["violations"] if v["type"] == "UNSTABLE_COHESION_LAYER"]
+    assert len(unstable_neg) == 0, "lcom4 at threshold (not above) must not trigger UNSTABLE_COHESION_LAYER"
+
+
+# ---------------------------------------------------------------------------
+# T16 — LOW_MI_VIOLATING_LAYER: низкий MI + слой с broken imports
+# ---------------------------------------------------------------------------
+
+def test_t16_low_mi_violating_layer_cross_event():
+    """
+    Radon файл app/services/search_service.py с mi=8.3, rank='C' +
+    ImportLinter broken import из app.services -> app.models
+    (задает linter_broken_imports=1 на слое services)
+    -> 1 LOW_MI_VIOLATING_LAYER, strength=strong, severity=error (rank C).
+
+    Дополнительно: rank B -> severity=warning.
+    Негативный кейс: linter_broken_imports=0 -> нет события.
+    """
+    context = {
+        "radon": _radon_low_mi_context(filepath=_FP, mi=8.3, rank="C"),
+        "import_graph": _graph_context(),       # нужен для layer_index["services"]
+        "import_linter": _linter_services_broken(),
+    }
+
+    result = aggregate_results(context, _base_config())
+    low_mi = [v for v in result["violations"] if v["type"] == "LOW_MI_VIOLATING_LAYER"]
+
+    assert len(low_mi) == 1, f"Expected 1 LOW_MI_VIOLATING_LAYER, got {len(low_mi)}"
+    ev = low_mi[0]
+    assert ev["strength"] == "strong"
+    assert ev["severity"] == "error"  # rank C -> error
+    assert ev["location"]["filepath"] == _FP
+    assert ev["location"]["layer"] == "services"
+    sources = {e["source"] for e in ev["evidence"]}
+    assert sources == {"radon", "import_linter"}
+
+    # --- rank B -> warning ---
+    ctx_b = {
+        "radon": _radon_low_mi_context(filepath=_FP, mi=14.0, rank="B"),
+        "import_graph": _graph_context(),
+        "import_linter": _linter_services_broken(),
+    }
+    result_b = aggregate_results(ctx_b, _base_config())
+    low_mi_b = [v for v in result_b["violations"] if v["type"] == "LOW_MI_VIOLATING_LAYER"]
+    assert len(low_mi_b) == 1
+    assert low_mi_b[0]["severity"] == "warning"
+
+    # --- Негативный кейс: linter_broken_imports=0 (нет нарушений контракта) ---
+    ctx_no_linter = {
+        "radon": _radon_low_mi_context(filepath=_FP, mi=8.3, rank="C"),
+        "import_graph": _graph_context(),
+        "import_linter": _linter_context(),  # broken_imports=None -> linter_broken_imports=0
+    }
+    result_neg = aggregate_results(ctx_no_linter, _base_config())
+    low_mi_neg = [v for v in result_neg["violations"] if v["type"] == "LOW_MI_VIOLATING_LAYER"]
+    assert len(low_mi_neg) == 0, "No LOW_MI_VIOLATING_LAYER expected when linter_broken_imports=0"
+
+
+# ---------------------------------------------------------------------------
+# T17 — LOW_COHESION_CONTRACT_LAYER: низкий LCOM4 + слой с broken imports
+# ---------------------------------------------------------------------------
+
+def test_t17_low_cohesion_contract_layer_cross_event():
+    """
+    Cohesion-класс SearchService (lcom4=2.0) в app/services +
+    ImportLinter broken import из app.services -> app.models
+    (linter_broken_imports=1 на слое services)
+    -> 1 LOW_COHESION_CONTRACT_LAYER, strength=strong, severity=warning (lcom4=2 < 3),
+       location.class_name='SearchService', evidence от cohesion И import_linter.
+
+    Дополнительно: lcom4=3.0 -> severity=error.
+    Негативный кейс: linter_broken_imports=0 -> нет события.
+    Негативный кейс: lcom4=1.0 (на пороге) -> нет события.
+    """
+    context = {
+        "cohesion": _cohesion_context(lcom4=2.0, filepath=_FP),
+        "import_graph": _graph_context(),        # нужен для layer_index["services"]
+        "import_linter": _linter_services_broken(),
+    }
+
+    result = aggregate_results(context, _base_config())
+    contract = [v for v in result["violations"] if v["type"] == "LOW_COHESION_CONTRACT_LAYER"]
+
+    assert len(contract) == 1, f"Expected 1 LOW_COHESION_CONTRACT_LAYER, got {len(contract)}"
+    ev = contract[0]
+    assert ev["strength"] == "strong"
+    assert ev["severity"] == "warning"  # lcom4=2 < 3 -> warning
+    assert ev["location"]["class_name"] == "SearchService"
+    assert ev["location"]["layer"] == "services"
+    sources = {e["source"] for e in ev["evidence"]}
+    assert sources == {"cohesion", "import_linter"}
+    # import_linter evidence должен содержать linter_broken_imports
+    linter_details = next(e["details"] for e in ev["evidence"] if e["source"] == "import_linter")
+    assert linter_details["linter_broken_imports"] >= 1
+
+    # --- lcom4=3.0 -> severity=error ---
+    ctx_error = {
+        "cohesion": _cohesion_context(lcom4=3.0, filepath=_FP),
+        "import_graph": _graph_context(),
+        "import_linter": _linter_services_broken(),
+    }
+    result_err = aggregate_results(ctx_error, _base_config())
+    contract_err = [v for v in result_err["violations"] if v["type"] == "LOW_COHESION_CONTRACT_LAYER"]
+    assert len(contract_err) == 1
+    assert contract_err[0]["severity"] == "error"
+
+    # --- Негативный кейс: linter_broken_imports=0 ---
+    ctx_no_linter = {
+        "cohesion": _cohesion_context(lcom4=2.0, filepath=_FP),
+        "import_graph": _graph_context(),
+        "import_linter": _linter_context(),  # нет broken imports
+    }
+    result_neg1 = aggregate_results(ctx_no_linter, _base_config())
+    contract_neg1 = [v for v in result_neg1["violations"] if v["type"] == "LOW_COHESION_CONTRACT_LAYER"]
+    assert len(contract_neg1) == 0, "No event expected when linter_broken_imports=0"
+
+    # --- Негативный кейс: lcom4=1.0 (ровно на пороге) ---
+    ctx_ok_cohesion = {
+        "cohesion": _cohesion_context(lcom4=1.0, filepath=_FP),
+        "import_graph": _graph_context(),
+        "import_linter": _linter_services_broken(),
+    }
+    result_neg2 = aggregate_results(ctx_ok_cohesion, _base_config())
+    contract_neg2 = [v for v in result_neg2["violations"] if v["type"] == "LOW_COHESION_CONTRACT_LAYER"]
+    assert len(contract_neg2) == 0, "lcom4 at threshold must not trigger LOW_COHESION_CONTRACT_LAYER"
