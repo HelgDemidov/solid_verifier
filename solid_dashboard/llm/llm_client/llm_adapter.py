@@ -129,19 +129,43 @@ class LlmSolidAdapter:
     def _build_context(self, project_map: ProjectMap, candidate: LlmCandidate) -> dict:
         """
         Минимальный контекст: только фокус-класс.
-        Поля соответствуют LlmCandidate в types.py: class_name, file_path, source_code, candidate_type.
+        Поля соответствуют LlmCandidate в types.py: class_name, file_path,
+        source_code, candidate_type.
 
-        В следующих шагах сюда будут добавлены связи из ProjectMap (родители, интерфейсы, соседние классы).
+        Дефект A — поле "findings" добавлено как пустая строка для совместимости
+                   с {findings} в user_base.md; также передаётся в _build_prompt_and_options
+                   через context для подстановки в шаблон.
+        Дефект B — source_code обрезается до SOURCE_CODE_MAX_LINES строк
+                   перед вставкой в промпт, предотвращая BudgetExhaustedError.
         """
-        # комментарий: пока игнорируем project_map, используем только данные кандидата
+        SOURCE_CODE_MAX_LINES = 200  # жёсткий лимит: Вариант 2
+
+        # project_map принимается для совместимости с будущими шагами расширения
+        raw_source = candidate.source_code or ""
+        lines = raw_source.splitlines()
+
+        if len(lines) > SOURCE_CODE_MAX_LINES:
+            trimmed = lines[:SOURCE_CODE_MAX_LINES]
+            trimmed.append(
+                f"# ... [truncated: показаны {SOURCE_CODE_MAX_LINES} из {len(lines)} строк]"
+            )
+            source_code = "\n".join(trimmed)
+            logger.debug(
+                "source_code for '%s' truncated: %d → %d lines.",
+                candidate.class_name,
+                len(lines),
+                SOURCE_CODE_MAX_LINES,
+            )
+        else:
+            source_code = raw_source
+
         return {
             "class_name": candidate.class_name,
             "file_path": candidate.file_path,
-            "source_code": candidate.source_code,
+            "source_code": source_code,         # обрезанный вариант (Дефект B)
             "candidate_type": candidate.candidate_type,
+            "findings": "",                     # заглушка для {findings} в шаблоне (Дефект A)
         }
-
-    # --- Prompt Builder (версия с опорой на внешние .md-шаблоны)
 
     def _build_prompt_and_options(
         self,
@@ -248,10 +272,11 @@ class LlmSolidAdapter:
 
         try:
             base_user_text = user_template.format(
-                candidate_type=candidate.candidate_type,
-                class_name=candidate.class_name,
-                file_path=candidate.file_path,
-                source_code=candidate.source_code,
+                candidate_type=context["candidate_type"],
+                class_name=context["class_name"],
+                file_path=context["file_path"],
+                source_code=context["source_code"],   # Дефект B: теперь обрезанная версия
+                findings=context["findings"],          # Дефект A: устраняет KeyError
             )
         except KeyError as exc:
             logger.error(
@@ -262,7 +287,7 @@ class LlmSolidAdapter:
                 f"Analyze the following Python class for {candidate.candidate_type} issues.\n"
                 f"Class: {candidate.class_name}\n"
                 f"File: {candidate.file_path}\n"
-                f"```python\n{candidate.source_code}\n```"
+                f"```python\n{context['source_code']}\n```"  # Дефект B: из context
             )
 
         # комментарий: собираем итоговый текст пользователя по слоям:

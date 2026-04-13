@@ -1,7 +1,7 @@
 {
   "radon": {
     "total_items": 165,
-    "mean_cc": 7.66,
+    "mean_cc": 7.67,
     "high_complexity_count": 44,
     "items": [
       {
@@ -81,7 +81,7 @@
         "type": "method",
         "complexity": 21,
         "rank": "D",
-        "lineno": 341,
+        "lineno": 366,
         "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
         "parameter_count": 3
       },
@@ -252,7 +252,7 @@
         "type": "method",
         "complexity": 14,
         "rank": "C",
-        "lineno": 146,
+        "lineno": 170,
         "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
         "parameter_count": 4
       },
@@ -396,7 +396,7 @@
         "type": "method",
         "complexity": 11,
         "rank": "C",
-        "lineno": 422,
+        "lineno": 447,
         "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
         "parameter_count": 3
       },
@@ -495,7 +495,7 @@
         "type": "method",
         "complexity": 9,
         "rank": "B",
-        "lineno": 292,
+        "lineno": 317,
         "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
         "parameter_count": 2
       },
@@ -1094,11 +1094,20 @@
         "parameter_count": 1
       },
       {
+        "name": "_build_context",
+        "type": "method",
+        "complexity": 3,
+        "rank": "A",
+        "lineno": 129,
+        "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
+        "parameter_count": 3
+      },
+      {
         "name": "_validate_structure",
         "type": "method",
         "complexity": 3,
         "rank": "A",
-        "lineno": 328,
+        "lineno": 353,
         "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
         "parameter_count": 2
       },
@@ -1451,15 +1460,6 @@
         "parameter_count": 3
       },
       {
-        "name": "_build_context",
-        "type": "method",
-        "complexity": 1,
-        "rank": "A",
-        "lineno": 129,
-        "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-        "parameter_count": 3
-      },
-      {
         "name": "chat",
         "type": "method",
         "complexity": 1,
@@ -1489,7 +1489,7 @@
     ],
     "maintainability": {
       "total_files": 41,
-      "mean_mi": 73.64,
+      "mean_mi": 73.63,
       "low_mi_count": 1,
       "files": [
         {
@@ -1509,7 +1509,7 @@
         },
         {
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "mi": 42.44,
+          "mi": 42.09,
           "rank": "A"
         },
         {
@@ -7311,7 +7311,7 @@
       {
         "class_name": "LlmSolidAdapter",
         "file_path": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-        "source_code": "class LlmSolidAdapter:\n    \"\"\"\n    Ядро LLM-анализа.\n\n    Получает LlmGateway и LlmConfig через DI.\n    Здесь только оркестрация: контекст → промпт → Gateway → парсинг.\n    \"\"\"\n\n    gateway: LlmGateway\n    config: LlmConfig\n\n    def analyze(self, analysis_input: LlmAnalysisInput) -> LlmAnalysisOutput:\n        project_map = analysis_input.project_map\n        candidates = sorted(\n            analysis_input.candidates,\n            key=lambda c: c.priority,\n            reverse=True,\n        )\n\n        all_findings: list[Finding] = []\n        processed = 0\n        skipped = 0\n        tokens_used = 0\n        cache_hits = 0\n\n        parse_failures = 0      # NEW\n        parse_partials = 0      # NEW\n        parse_warnings = 0      # NEW\n\n        for candidate in candidates:\n            try:\n                context = self._build_context(project_map, candidate)\n                messages, options = self._build_prompt_and_options(context, candidate)\n                response = self.gateway.analyze(messages, options)\n\n                # парсим ответ LLM через ACL-B\n                parse_result = self._parse_response(response, candidate)\n\n                # Агрегируем warnings ACL-B\n                parse_warnings += len(parse_result.warnings)\n\n                if parse_result.status == \"failure\":\n                    # HTTP-уровень ок, но JSON/контент не соответствует контракту\n                    parse_failures += 1\n                    skipped += 1\n                else:\n                    # success или partial считаем обработанными\n                    if parse_result.status == \"partial\":\n                        parse_partials += 1\n\n                    all_findings.extend(parse_result.findings)\n                    processed += 1\n\n                # Токены и cache\n                tokens_for_call = getattr(response, \"tokens_used\", 0)\n                if tokens_for_call == 0:\n                    cache_hits += 1\n                else:\n                    tokens_used += tokens_for_call\n\n            except (RetryableError, NonRetryableError) as exc:\n                logger.warning(\n                    \"LLM error for candidate '%s' (%s), skipping. %s: %s\",\n                    candidate.class_name,\n                    candidate.candidate_type,\n                    type(exc).__name__,\n                    exc,\n                )\n                skipped += 1\n            except Exception as exc:\n                logger.exception(\n                    \"Unexpected error in LlmSolidAdapter for candidate '%s': %s\",\n                    candidate.class_name,\n                    exc,\n                )\n                skipped += 1\n\n        if candidates and processed == 0:\n            logger.warning(\n                \"All LLM candidates failed: %d skipped out of %d. \"\n                \"Check model compatibility or prompt configuration.\",\n                skipped,\n                len(candidates),\n            )\n\n        metadata = LlmMetadata(\n            candidates_processed=processed,\n            candidates_skipped=skipped,\n            tokens_used=tokens_used,\n            cache_hits=cache_hits,\n            parse_failures=parse_failures,     # NEW\n            parse_partials=parse_partials,     # NEW\n            parse_warnings=parse_warnings,     # NEW\n        )\n        return LlmAnalysisOutput(findings=all_findings, metadata=metadata)\n\n    # --- Context Assembler (минимальная версия, будет расширена на Шаге 5.x) ---\n\n    def _build_context(self, project_map: ProjectMap, candidate: LlmCandidate) -> dict:\n        \"\"\"\n        Минимальный контекст: только фокус-класс.\n        Поля соответствуют LlmCandidate в types.py: class_name, file_path, source_code, candidate_type.\n\n        В следующих шагах сюда будут добавлены связи из ProjectMap (родители, интерфейсы, соседние классы).\n        \"\"\"\n        # комментарий: пока игнорируем project_map, используем только данные кандидата\n        return {\n            \"class_name\": candidate.class_name,\n            \"file_path\": candidate.file_path,\n            \"source_code\": candidate.source_code,\n            \"candidate_type\": candidate.candidate_type,\n        }\n\n    # --- Prompt Builder (версия с опорой на внешние .md-шаблоны)\n\n    def _build_prompt_and_options(\n        self,\n        context: dict,\n        candidate: \"LlmCandidate\",\n    ) -> tuple[Sequence[Message], LlmOptions]:\n        \"\"\"\n        Строит итоговый промпт для LLM, объединяя контекст и шаблоны из файловой системы.\n\n        Использует:\n        - system.md      — роль и общие правила анализа SOLID;\n        - user_base.md   — базовый пользовательский промпт для одного класса;\n        - user_ocp_section.md / user_lsp_section.md — доп. секции в зависимости от типа кандидата;\n        - response_schema.json — описание ожидаемого JSON-ответа.\n        \"\"\"\n        prompts_dir = Path(self.config.prompts_dir)\n\n        # --- System prompt ---\n\n        system_path = prompts_dir / \"system.md\"\n        try:\n            system_text = system_path.read_text(encoding=\"utf-8\")\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read system.md from %s: %s. Using fallback.\",\n                prompts_dir,\n                exc,\n            )\n            system_text = (\n                \"You are a SOLID principles expert. \"\n                \"Analyze Python code for potential OCP and LSP issues.\"\n            )\n\n        # --- Base user prompt template ---\n\n        user_base_path = prompts_dir / \"user_base.md\"\n        try:\n            user_template = user_base_path.read_text(encoding=\"utf-8\")\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read user_base.md from %s: %s. Using fallback.\",\n                prompts_dir,\n                exc,\n            )\n            user_template = (\n                \"Analyze the following Python class for {candidate_type} issues.\\n\"\n                \"Class: {class_name}\\n\"\n                \"File: {file_path}\\n\"\n                \"```python\\n{source_code}\\n```\"\n            )\n\n        # --- Optional OCP / LSP focus sections ---\n\n        ocp_section_text = \"\"\n        lsp_section_text = \"\"\n\n        # комментарий: OCP-секция добавляется только для кандидатов с типом ocp или both\n        if candidate.candidate_type in (\"ocp\", \"both\"):\n            ocp_path = prompts_dir / \"user_ocp_section.md\"\n            try:\n                ocp_section_text = ocp_path.read_text(encoding=\"utf-8\")\n            except Exception as exc:\n                logger.warning(\n                    \"Failed to read user_ocp_section.md from %s: %s. Skipping OCP section.\",\n                    prompts_dir,\n                    exc,\n                )\n\n        # комментарий: LSP-секция добавляется только для кандидатов с типом lsp или both\n        if candidate.candidate_type in (\"lsp\", \"both\"):\n            lsp_path = prompts_dir / \"user_lsp_section.md\"\n            try:\n                lsp_section_text = lsp_path.read_text(encoding=\"utf-8\")\n            except Exception as exc:\n                logger.warning(\n                    \"Failed to read user_lsp_section.md from %s: %s. Skipping LSP section.\",\n                    prompts_dir,\n                    exc,\n                )\n\n        # --- Response schema (JSON) ---\n\n        schema_suffix = \"\"\n        schema_path = prompts_dir / \"response_schema.json\"\n        try:\n            raw = schema_path.read_text(encoding=\"utf-8\")\n            # комментарий: предполагаем простую структуру {\"instruction\": \"...\", ...}\n            # и используем только поле instruction; при ошибках парсинга fallback — пустой суффикс.\n            import json  # локальный импорт, чтобы не тянуть json глобально, если LLM отключен\n\n            data = json.loads(raw)\n            instruction = data.get(\"instruction\")\n            if isinstance(instruction, str) and instruction.strip():\n                schema_suffix = \"\\n\\n\" + instruction.strip()\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read or parse response_schema.json from %s: %s. \"\n                \"Proceeding without explicit schema instruction.\",\n                prompts_dir,\n                exc,\n            )\n\n        # --- Формирование итогового user-промпта ---\n\n        try:\n            base_user_text = user_template.format(\n                candidate_type=candidate.candidate_type,\n                class_name=candidate.class_name,\n                file_path=candidate.file_path,\n                source_code=candidate.source_code,\n            )\n        except KeyError as exc:\n            logger.error(\n                \"Missing placeholder %s in user_base.md. Using fallback user prompt.\",\n                exc,\n            )\n            base_user_text = (\n                f\"Analyze the following Python class for {candidate.candidate_type} issues.\\n\"\n                f\"Class: {candidate.class_name}\\n\"\n                f\"File: {candidate.file_path}\\n\"\n                f\"```python\\n{candidate.source_code}\\n```\"\n            )\n\n        # комментарий: собираем итоговый текст пользователя по слоям:\n        # базовый промпт → OCP/LSP‑фокусы → инструкция по JSON-схеме\n        user_parts = [base_user_text]\n        if ocp_section_text:\n            user_parts.append(\"\\n\\n\" + ocp_section_text.strip())\n        if lsp_section_text:\n            user_parts.append(\"\\n\\n\" + lsp_section_text.strip())\n        if schema_suffix:\n            user_parts.append(schema_suffix)\n\n        user_text = \"\".join(user_parts)\n\n        # --- Messages + options для Gateway ---\n\n        messages: List[Message] = [\n            Message(role=\"system\", content=system_text),\n            Message(role=\"user\", content=user_text),\n        ]\n        options = LlmOptions(model=self.config.model)\n\n        return messages, options\n\n    # --- Response Parser (ACL-B) ---\n\n    def _extract_json_content(self, text: str) -> dict | None:\n        \"\"\"\n        Слой 1: Извлечение сырого JSON из текста ответа LLM.\n        Пытается распарсить напрямую, очистить от markdown-тегов или найти блок { ... }.\n        \"\"\"\n        if not text:\n            return None\n\n        text = text.strip()\n        \n        # Попытка 1: Прямой парсинг (если модель вернула идеальный JSON)\n        try:\n            return json.loads(text)\n        except json.JSONDecodeError:\n            pass\n\n        # Попытка 2: Вырезка markdown-блока (```json ... ``` или ``` ... ```)\n        # re.DOTALL позволяет символу '.' совпадать с переносами строк\n        match = re.search(r\"```(?:json)?\\s*(.*?)\\s*```\", text, re.DOTALL)\n        if match:\n            try:\n                return json.loads(match.group(1).strip())\n            except json.JSONDecodeError:\n                pass\n\n        # Попытка 3: Экстренный поиск первого '{' и последнего '}'\n        start_idx = text.find(\"{\")\n        end_idx = text.rfind(\"}\")\n        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:\n            try:\n                return json.loads(text[start_idx : end_idx + 1])\n            except json.JSONDecodeError:\n                pass\n\n        return None\n\n    def _validate_structure(self, data: dict) -> list[dict] | None:\n        \"\"\"\n        Слой 2: Минимальная проверка ожидаемой структуры ответа.\n        \"\"\"\n        if not isinstance(data, dict):\n            return None\n        \n        findings = data.get(\"findings\")\n        if not isinstance(findings, list):\n            return None\n            \n        return findings\n\n    def _validate_finding(self, raw: dict, candidate: LlmCandidate) -> Finding | None:\n        \"\"\"\n        Слой 3: Валидация конкретной находки и маппинг в доменные\n        Finding / FindingDetails.\n        \"\"\"\n        if not isinstance(raw, dict):\n            return None\n\n        # message — минимально обязательное содержимое finding;\n        # без него finding теряет смысл для отчета.\n        raw_message = raw.get(\"message\")\n        if not isinstance(raw_message, str) or not raw_message.strip():\n            return None\n        message = raw_message.strip()\n\n        # нормализуем severity в поддерживаемый набор;\n        # неизвестные значения понижаем до warning как безопасный дефолт.\n        raw_severity = str(raw.get(\"severity\", \"\")).lower()\n        severity = raw_severity if raw_severity in (\"error\", \"warning\", \"info\") else \"warning\"\n\n        # principle — смысловое поле details, а не top-level поля Finding.\n        # Сначала доверяем явному ответу модели, потом используем candidate_type как fallback.\n        raw_principle = str(raw.get(\"principle\", \"\")).upper()\n        if raw_principle not in (\"OCP\", \"LSP\"):\n            if candidate.candidate_type == \"ocp\":\n                raw_principle = \"OCP\"\n            elif candidate.candidate_type == \"lsp\":\n                raw_principle = \"LSP\"\n            else:\n                # для candidate_type=\"both\" без явного principle\n                # finding неоднозначен, поэтому лучше пропустить его.\n                return None\n\n        # rule генерируем сами по внутреннему соглашению проекта,\n        # чтобы не зависеть от капризов LLM и сохранить единый naming contract.\n        rule = f\"{raw_principle}-LLM-001\"\n\n        # explanation допускает два возможных имени поля в JSON:\n        # \"explanation\" как целевое и \"details\" как совместимость с ранними промптами.\n        raw_explanation = raw.get(\"explanation\")\n        if not isinstance(raw_explanation, str) or not raw_explanation.strip():\n            raw_explanation = raw.get(\"details\")\n        explanation = raw_explanation.strip() if isinstance(raw_explanation, str) and raw_explanation.strip() else None\n\n        raw_suggestion = raw.get(\"suggestion\")\n        suggestion = raw_suggestion.strip() if isinstance(raw_suggestion, str) and raw_suggestion.strip() else None\n\n        raw_method_name = raw.get(\"method_name\")\n        method_name = raw_method_name.strip() if isinstance(raw_method_name, str) and raw_method_name.strip() else None\n\n        raw_analyzed_with = raw.get(\"analyzed_with\")\n        analyzed_with = None\n        if isinstance(raw_analyzed_with, list):\n            cleaned = [\n                item.strip()\n                for item in raw_analyzed_with\n                if isinstance(item, str) and item.strip()\n            ]\n            if cleaned:\n                analyzed_with = cleaned\n\n        details = FindingDetails(\n            principle=raw_principle,\n            explanation=explanation,\n            suggestion=suggestion,\n            analyzed_with=analyzed_with,\n            heuristic_corroboration=True,\n            method_name=method_name,\n        )\n\n        return Finding(\n            rule=rule,\n            file=candidate.file_path,\n            severity=severity,\n            message=message,\n            source=\"llm\",\n            class_name=candidate.class_name,\n            line=None,\n            details=details,\n        )\n\n    def _parse_response(self, response, candidate: LlmCandidate) -> ParseResult:\n        # warnings собираем по мере прохождения слоев ACL-B\n        warnings: list[str] = []\n\n        raw_content = getattr(response, \"content\", \"\")\n\n        # 1. Извлекаем JSON-словарь\n        parsed_data = self._extract_json_content(raw_content)\n        if not parsed_data:\n            msg = (\n                f\"Failed to extract JSON from LLM response for candidate \"\n                f\"'{candidate.class_name}'. Raw snippet: \"\n                f\"{raw_content[:100].replace('\\\\n', ' ')}...\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n            return ParseResult(\n                findings=[],\n                warnings=warnings,\n                status=\"failure\",\n            )\n\n        # 2. Проверяем наличие ключа findings\n        raw_findings = self._validate_structure(parsed_data)\n        if raw_findings is None:\n            keys = list(parsed_data.keys())\n            msg = (\n                f\"LLM response for candidate '{candidate.class_name}' \"\n                f\"missing 'findings' array. Parsed keys: {keys}\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n            return ParseResult(\n                findings=[],\n                warnings=warnings,\n                status=\"failure\",\n            )\n\n        # 3. Маппим каждый finding\n        valid_findings: list[Finding] = []\n        dropped_count = 0\n\n        for raw_item in raw_findings:\n            finding = self._validate_finding(raw_item, candidate)\n            if finding:\n                valid_findings.append(finding)\n            else:\n                dropped_count += 1\n\n        if not valid_findings and len(raw_findings) > 0:\n            msg = (\n                f\"Extracted {len(raw_findings)} items for candidate \"\n                f\"'{candidate.class_name}', but none were valid findings.\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n        # Определяем статус\n        if not valid_findings and not raw_findings:\n            # JSON и структура корректны, просто модель не нашла нарушений.\n            status: ParseStatus = \"success\"\n        elif dropped_count == 0:\n            status = \"success\"\n        elif dropped_count < len(raw_findings):\n            status = \"partial\"\n        else:\n            # формально сюда мы уже зашли в ветке \"none valid\", но оставляем на случай\n            status = \"failure\"\n\n        return ParseResult(\n            findings=valid_findings,\n            warnings=warnings,\n            status=status,\n        )",
+        "source_code": "class LlmSolidAdapter:\n    \"\"\"\n    Ядро LLM-анализа.\n\n    Получает LlmGateway и LlmConfig через DI.\n    Здесь только оркестрация: контекст → промпт → Gateway → парсинг.\n    \"\"\"\n\n    gateway: LlmGateway\n    config: LlmConfig\n\n    def analyze(self, analysis_input: LlmAnalysisInput) -> LlmAnalysisOutput:\n        project_map = analysis_input.project_map\n        candidates = sorted(\n            analysis_input.candidates,\n            key=lambda c: c.priority,\n            reverse=True,\n        )\n\n        all_findings: list[Finding] = []\n        processed = 0\n        skipped = 0\n        tokens_used = 0\n        cache_hits = 0\n\n        parse_failures = 0      # NEW\n        parse_partials = 0      # NEW\n        parse_warnings = 0      # NEW\n\n        for candidate in candidates:\n            try:\n                context = self._build_context(project_map, candidate)\n                messages, options = self._build_prompt_and_options(context, candidate)\n                response = self.gateway.analyze(messages, options)\n\n                # парсим ответ LLM через ACL-B\n                parse_result = self._parse_response(response, candidate)\n\n                # Агрегируем warnings ACL-B\n                parse_warnings += len(parse_result.warnings)\n\n                if parse_result.status == \"failure\":\n                    # HTTP-уровень ок, но JSON/контент не соответствует контракту\n                    parse_failures += 1\n                    skipped += 1\n                else:\n                    # success или partial считаем обработанными\n                    if parse_result.status == \"partial\":\n                        parse_partials += 1\n\n                    all_findings.extend(parse_result.findings)\n                    processed += 1\n\n                # Токены и cache\n                tokens_for_call = getattr(response, \"tokens_used\", 0)\n                if tokens_for_call == 0:\n                    cache_hits += 1\n                else:\n                    tokens_used += tokens_for_call\n\n            except (RetryableError, NonRetryableError) as exc:\n                logger.warning(\n                    \"LLM error for candidate '%s' (%s), skipping. %s: %s\",\n                    candidate.class_name,\n                    candidate.candidate_type,\n                    type(exc).__name__,\n                    exc,\n                )\n                skipped += 1\n            except Exception as exc:\n                logger.exception(\n                    \"Unexpected error in LlmSolidAdapter for candidate '%s': %s\",\n                    candidate.class_name,\n                    exc,\n                )\n                skipped += 1\n\n        if candidates and processed == 0:\n            logger.warning(\n                \"All LLM candidates failed: %d skipped out of %d. \"\n                \"Check model compatibility or prompt configuration.\",\n                skipped,\n                len(candidates),\n            )\n\n        metadata = LlmMetadata(\n            candidates_processed=processed,\n            candidates_skipped=skipped,\n            tokens_used=tokens_used,\n            cache_hits=cache_hits,\n            parse_failures=parse_failures,     # NEW\n            parse_partials=parse_partials,     # NEW\n            parse_warnings=parse_warnings,     # NEW\n        )\n        return LlmAnalysisOutput(findings=all_findings, metadata=metadata)\n\n    # --- Context Assembler (минимальная версия, будет расширена на Шаге 5.x) ---\n\n    def _build_context(self, project_map: ProjectMap, candidate: LlmCandidate) -> dict:\n        \"\"\"\n        Минимальный контекст: только фокус-класс.\n        Поля соответствуют LlmCandidate в types.py: class_name, file_path,\n        source_code, candidate_type.\n\n        Дефект A — поле \"findings\" добавлено как пустая строка для совместимости\n                   с {findings} в user_base.md; также передаётся в _build_prompt_and_options\n                   через context для подстановки в шаблон.\n        Дефект B — source_code обрезается до SOURCE_CODE_MAX_LINES строк\n                   перед вставкой в промпт, предотвращая BudgetExhaustedError.\n        \"\"\"\n        SOURCE_CODE_MAX_LINES = 200  # жёсткий лимит: Вариант 2\n\n        # project_map принимается для совместимости с будущими шагами расширения\n        raw_source = candidate.source_code or \"\"\n        lines = raw_source.splitlines()\n\n        if len(lines) > SOURCE_CODE_MAX_LINES:\n            trimmed = lines[:SOURCE_CODE_MAX_LINES]\n            trimmed.append(\n                f\"# ... [truncated: показаны {SOURCE_CODE_MAX_LINES} из {len(lines)} строк]\"\n            )\n            source_code = \"\\n\".join(trimmed)\n            logger.debug(\n                \"source_code for '%s' truncated: %d → %d lines.\",\n                candidate.class_name,\n                len(lines),\n                SOURCE_CODE_MAX_LINES,\n            )\n        else:\n            source_code = raw_source\n\n        return {\n            \"class_name\": candidate.class_name,\n            \"file_path\": candidate.file_path,\n            \"source_code\": source_code,         # обрезанный вариант (Дефект B)\n            \"candidate_type\": candidate.candidate_type,\n            \"findings\": \"\",                     # заглушка для {findings} в шаблоне (Дефект A)\n        }\n\n    def _build_prompt_and_options(\n        self,\n        context: dict,\n        candidate: \"LlmCandidate\",\n    ) -> tuple[Sequence[Message], LlmOptions]:\n        \"\"\"\n        Строит итоговый промпт для LLM, объединяя контекст и шаблоны из файловой системы.\n\n        Использует:\n        - system.md      — роль и общие правила анализа SOLID;\n        - user_base.md   — базовый пользовательский промпт для одного класса;\n        - user_ocp_section.md / user_lsp_section.md — доп. секции в зависимости от типа кандидата;\n        - response_schema.json — описание ожидаемого JSON-ответа.\n        \"\"\"\n        prompts_dir = Path(self.config.prompts_dir)\n\n        # --- System prompt ---\n\n        system_path = prompts_dir / \"system.md\"\n        try:\n            system_text = system_path.read_text(encoding=\"utf-8\")\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read system.md from %s: %s. Using fallback.\",\n                prompts_dir,\n                exc,\n            )\n            system_text = (\n                \"You are a SOLID principles expert. \"\n                \"Analyze Python code for potential OCP and LSP issues.\"\n            )\n\n        # --- Base user prompt template ---\n\n        user_base_path = prompts_dir / \"user_base.md\"\n        try:\n            user_template = user_base_path.read_text(encoding=\"utf-8\")\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read user_base.md from %s: %s. Using fallback.\",\n                prompts_dir,\n                exc,\n            )\n            user_template = (\n                \"Analyze the following Python class for {candidate_type} issues.\\n\"\n                \"Class: {class_name}\\n\"\n                \"File: {file_path}\\n\"\n                \"```python\\n{source_code}\\n```\"\n            )\n\n        # --- Optional OCP / LSP focus sections ---\n\n        ocp_section_text = \"\"\n        lsp_section_text = \"\"\n\n        # комментарий: OCP-секция добавляется только для кандидатов с типом ocp или both\n        if candidate.candidate_type in (\"ocp\", \"both\"):\n            ocp_path = prompts_dir / \"user_ocp_section.md\"\n            try:\n                ocp_section_text = ocp_path.read_text(encoding=\"utf-8\")\n            except Exception as exc:\n                logger.warning(\n                    \"Failed to read user_ocp_section.md from %s: %s. Skipping OCP section.\",\n                    prompts_dir,\n                    exc,\n                )\n\n        # комментарий: LSP-секция добавляется только для кандидатов с типом lsp или both\n        if candidate.candidate_type in (\"lsp\", \"both\"):\n            lsp_path = prompts_dir / \"user_lsp_section.md\"\n            try:\n                lsp_section_text = lsp_path.read_text(encoding=\"utf-8\")\n            except Exception as exc:\n                logger.warning(\n                    \"Failed to read user_lsp_section.md from %s: %s. Skipping LSP section.\",\n                    prompts_dir,\n                    exc,\n                )\n\n        # --- Response schema (JSON) ---\n\n        schema_suffix = \"\"\n        schema_path = prompts_dir / \"response_schema.json\"\n        try:\n            raw = schema_path.read_text(encoding=\"utf-8\")\n            # комментарий: предполагаем простую структуру {\"instruction\": \"...\", ...}\n            # и используем только поле instruction; при ошибках парсинга fallback — пустой суффикс.\n            import json  # локальный импорт, чтобы не тянуть json глобально, если LLM отключен\n\n            data = json.loads(raw)\n            instruction = data.get(\"instruction\")\n            if isinstance(instruction, str) and instruction.strip():\n                schema_suffix = \"\\n\\n\" + instruction.strip()\n        except Exception as exc:\n            logger.warning(\n                \"Failed to read or parse response_schema.json from %s: %s. \"\n                \"Proceeding without explicit schema instruction.\",\n                prompts_dir,\n                exc,\n            )\n\n        # --- Формирование итогового user-промпта ---\n\n        try:\n            base_user_text = user_template.format(\n                candidate_type=context[\"candidate_type\"],\n                class_name=context[\"class_name\"],\n                file_path=context[\"file_path\"],\n                source_code=context[\"source_code\"],   # Дефект B: теперь обрезанная версия\n                findings=context[\"findings\"],          # Дефект A: устраняет KeyError\n            )\n        except KeyError as exc:\n            logger.error(\n                \"Missing placeholder %s in user_base.md. Using fallback user prompt.\",\n                exc,\n            )\n            base_user_text = (\n                f\"Analyze the following Python class for {candidate.candidate_type} issues.\\n\"\n                f\"Class: {candidate.class_name}\\n\"\n                f\"File: {candidate.file_path}\\n\"\n                f\"```python\\n{context['source_code']}\\n```\"  # Дефект B: из context\n            )\n\n        # комментарий: собираем итоговый текст пользователя по слоям:\n        # базовый промпт → OCP/LSP‑фокусы → инструкция по JSON-схеме\n        user_parts = [base_user_text]\n        if ocp_section_text:\n            user_parts.append(\"\\n\\n\" + ocp_section_text.strip())\n        if lsp_section_text:\n            user_parts.append(\"\\n\\n\" + lsp_section_text.strip())\n        if schema_suffix:\n            user_parts.append(schema_suffix)\n\n        user_text = \"\".join(user_parts)\n\n        # --- Messages + options для Gateway ---\n\n        messages: List[Message] = [\n            Message(role=\"system\", content=system_text),\n            Message(role=\"user\", content=user_text),\n        ]\n        options = LlmOptions(model=self.config.model)\n\n        return messages, options\n\n    # --- Response Parser (ACL-B) ---\n\n    def _extract_json_content(self, text: str) -> dict | None:\n        \"\"\"\n        Слой 1: Извлечение сырого JSON из текста ответа LLM.\n        Пытается распарсить напрямую, очистить от markdown-тегов или найти блок { ... }.\n        \"\"\"\n        if not text:\n            return None\n\n        text = text.strip()\n        \n        # Попытка 1: Прямой парсинг (если модель вернула идеальный JSON)\n        try:\n            return json.loads(text)\n        except json.JSONDecodeError:\n            pass\n\n        # Попытка 2: Вырезка markdown-блока (```json ... ``` или ``` ... ```)\n        # re.DOTALL позволяет символу '.' совпадать с переносами строк\n        match = re.search(r\"```(?:json)?\\s*(.*?)\\s*```\", text, re.DOTALL)\n        if match:\n            try:\n                return json.loads(match.group(1).strip())\n            except json.JSONDecodeError:\n                pass\n\n        # Попытка 3: Экстренный поиск первого '{' и последнего '}'\n        start_idx = text.find(\"{\")\n        end_idx = text.rfind(\"}\")\n        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:\n            try:\n                return json.loads(text[start_idx : end_idx + 1])\n            except json.JSONDecodeError:\n                pass\n\n        return None\n\n    def _validate_structure(self, data: dict) -> list[dict] | None:\n        \"\"\"\n        Слой 2: Минимальная проверка ожидаемой структуры ответа.\n        \"\"\"\n        if not isinstance(data, dict):\n            return None\n        \n        findings = data.get(\"findings\")\n        if not isinstance(findings, list):\n            return None\n            \n        return findings\n\n    def _validate_finding(self, raw: dict, candidate: LlmCandidate) -> Finding | None:\n        \"\"\"\n        Слой 3: Валидация конкретной находки и маппинг в доменные\n        Finding / FindingDetails.\n        \"\"\"\n        if not isinstance(raw, dict):\n            return None\n\n        # message — минимально обязательное содержимое finding;\n        # без него finding теряет смысл для отчета.\n        raw_message = raw.get(\"message\")\n        if not isinstance(raw_message, str) or not raw_message.strip():\n            return None\n        message = raw_message.strip()\n\n        # нормализуем severity в поддерживаемый набор;\n        # неизвестные значения понижаем до warning как безопасный дефолт.\n        raw_severity = str(raw.get(\"severity\", \"\")).lower()\n        severity = raw_severity if raw_severity in (\"error\", \"warning\", \"info\") else \"warning\"\n\n        # principle — смысловое поле details, а не top-level поля Finding.\n        # Сначала доверяем явному ответу модели, потом используем candidate_type как fallback.\n        raw_principle = str(raw.get(\"principle\", \"\")).upper()\n        if raw_principle not in (\"OCP\", \"LSP\"):\n            if candidate.candidate_type == \"ocp\":\n                raw_principle = \"OCP\"\n            elif candidate.candidate_type == \"lsp\":\n                raw_principle = \"LSP\"\n            else:\n                # для candidate_type=\"both\" без явного principle\n                # finding неоднозначен, поэтому лучше пропустить его.\n                return None\n\n        # rule генерируем сами по внутреннему соглашению проекта,\n        # чтобы не зависеть от капризов LLM и сохранить единый naming contract.\n        rule = f\"{raw_principle}-LLM-001\"\n\n        # explanation допускает два возможных имени поля в JSON:\n        # \"explanation\" как целевое и \"details\" как совместимость с ранними промптами.\n        raw_explanation = raw.get(\"explanation\")\n        if not isinstance(raw_explanation, str) or not raw_explanation.strip():\n            raw_explanation = raw.get(\"details\")\n        explanation = raw_explanation.strip() if isinstance(raw_explanation, str) and raw_explanation.strip() else None\n\n        raw_suggestion = raw.get(\"suggestion\")\n        suggestion = raw_suggestion.strip() if isinstance(raw_suggestion, str) and raw_suggestion.strip() else None\n\n        raw_method_name = raw.get(\"method_name\")\n        method_name = raw_method_name.strip() if isinstance(raw_method_name, str) and raw_method_name.strip() else None\n\n        raw_analyzed_with = raw.get(\"analyzed_with\")\n        analyzed_with = None\n        if isinstance(raw_analyzed_with, list):\n            cleaned = [\n                item.strip()\n                for item in raw_analyzed_with\n                if isinstance(item, str) and item.strip()\n            ]\n            if cleaned:\n                analyzed_with = cleaned\n\n        details = FindingDetails(\n            principle=raw_principle,\n            explanation=explanation,\n            suggestion=suggestion,\n            analyzed_with=analyzed_with,\n            heuristic_corroboration=True,\n            method_name=method_name,\n        )\n\n        return Finding(\n            rule=rule,\n            file=candidate.file_path,\n            severity=severity,\n            message=message,\n            source=\"llm\",\n            class_name=candidate.class_name,\n            line=None,\n            details=details,\n        )\n\n    def _parse_response(self, response, candidate: LlmCandidate) -> ParseResult:\n        # warnings собираем по мере прохождения слоев ACL-B\n        warnings: list[str] = []\n\n        raw_content = getattr(response, \"content\", \"\")\n\n        # 1. Извлекаем JSON-словарь\n        parsed_data = self._extract_json_content(raw_content)\n        if not parsed_data:\n            msg = (\n                f\"Failed to extract JSON from LLM response for candidate \"\n                f\"'{candidate.class_name}'. Raw snippet: \"\n                f\"{raw_content[:100].replace('\\\\n', ' ')}...\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n            return ParseResult(\n                findings=[],\n                warnings=warnings,\n                status=\"failure\",\n            )\n\n        # 2. Проверяем наличие ключа findings\n        raw_findings = self._validate_structure(parsed_data)\n        if raw_findings is None:\n            keys = list(parsed_data.keys())\n            msg = (\n                f\"LLM response for candidate '{candidate.class_name}' \"\n                f\"missing 'findings' array. Parsed keys: {keys}\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n            return ParseResult(\n                findings=[],\n                warnings=warnings,\n                status=\"failure\",\n            )\n\n        # 3. Маппим каждый finding\n        valid_findings: list[Finding] = []\n        dropped_count = 0\n\n        for raw_item in raw_findings:\n            finding = self._validate_finding(raw_item, candidate)\n            if finding:\n                valid_findings.append(finding)\n            else:\n                dropped_count += 1\n\n        if not valid_findings and len(raw_findings) > 0:\n            msg = (\n                f\"Extracted {len(raw_findings)} items for candidate \"\n                f\"'{candidate.class_name}', but none were valid findings.\"\n            )\n            logger.warning(msg)\n            warnings.append(msg)\n\n        # Определяем статус\n        if not valid_findings and not raw_findings:\n            # JSON и структура корректны, просто модель не нашла нарушений.\n            status: ParseStatus = \"success\"\n        elif dropped_count == 0:\n            status = \"success\"\n        elif dropped_count < len(raw_findings):\n            status = \"partial\"\n        else:\n            # формально сюда мы уже зашли в ветке \"none valid\", но оставляем на случай\n            status = \"failure\"\n\n        return ParseResult(\n            findings=valid_findings,\n            warnings=warnings,\n            status=status,\n        )",
         "candidate_type": "ocp",
         "heuristic_reasons": [
           "OCP-H-004",
@@ -7405,7 +7405,7 @@
   },
   "aggregated_report": {
     "meta": {
-      "generated_at": "2026-04-13T16:33:17.938177+00:00",
+      "generated_at": "2026-04-13T16:58:43.455956+00:00",
       "adapter_versions_available": [
         "radon",
         "cohesion",
@@ -7427,7 +7427,7 @@
     "summary": {
       "complexity": {
         "total_items": 165,
-        "mean_cc": 7.66,
+        "mean_cc": 7.67,
         "high_complexity_count": 44,
         "rank_distribution": {
           "F": 2,
@@ -7440,7 +7440,7 @@
       },
       "maintainability": {
         "total_files": 41,
-        "mean_mi": 73.64,
+        "mean_mi": 73.63,
         "low_mi_count": 1,
         "rank_distribution": {
           "A": 40,
@@ -7861,10 +7861,10 @@
         {
           "file_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "mi": 42.44,
+          "mi": 42.09,
           "mi_rank": "A",
           "function_count": 7,
-          "mean_cc": 9.71,
+          "mean_cc": 10.0,
           "max_cc": 21,
           "high_cc_count": 3,
           "class_count": 1
@@ -8102,9 +8102,9 @@
           "methods_count": 7,
           "excluded_from_aggregation": true,
           "label": "LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "max_method_cc": 21,
-          "mean_method_cc": 9.71
+          "mean_method_cc": 10.0
         },
         {
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\provider.py::OpenRouterProvider",
@@ -9598,76 +9598,63 @@
           "name": "_build_context",
           "type": "method",
           "lineno": 129,
-          "cc": 1,
+          "cc": 3,
           "rank": "A",
           "parameter_count": 3,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
-          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::146::_build_prompt_and_options",
+          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::170::_build_prompt_and_options",
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
           "name": "_build_prompt_and_options",
           "type": "method",
-          "lineno": 146,
+          "lineno": 170,
           "cc": 14,
           "rank": "C",
           "parameter_count": 4,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
-          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::292::_extract_json_content",
+          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::317::_extract_json_content",
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
           "name": "_extract_json_content",
           "type": "method",
-          "lineno": 292,
+          "lineno": 317,
           "cc": 9,
           "rank": "B",
           "parameter_count": 2,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
-          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::328::_validate_structure",
+          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::353::_validate_structure",
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
           "name": "_validate_structure",
           "type": "method",
-          "lineno": 328,
+          "lineno": 353,
           "cc": 3,
           "rank": "A",
           "parameter_count": 2,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
-          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::341::_validate_finding",
+          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::366::_validate_finding",
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
           "name": "_validate_finding",
           "type": "method",
-          "lineno": 341,
+          "lineno": 366,
           "cc": 21,
           "rank": "D",
           "parameter_count": 3,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
-          "class_lcom4": 1.0
-        },
-        {
-          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::422::_parse_response",
-          "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "name": "_parse_response",
-          "type": "method",
-          "lineno": 422,
-          "cc": 11,
-          "rank": "C",
-          "parameter_count": 3,
-          "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
@@ -9680,7 +9667,20 @@
           "rank": "B",
           "parameter_count": 2,
           "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
-          "file_mi": 42.44,
+          "file_mi": 42.09,
+          "class_lcom4": 1.0
+        },
+        {
+          "function_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::447::_parse_response",
+          "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
+          "name": "_parse_response",
+          "type": "method",
+          "lineno": 447,
+          "cc": 11,
+          "rank": "C",
+          "parameter_count": 3,
+          "class_id": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::LlmSolidAdapter",
+          "file_mi": 42.09,
           "class_lcom4": 1.0
         },
         {
@@ -10718,12 +10718,12 @@
         "strength": "weak"
       },
       {
-        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::341::_validate_finding",
+        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::366::_validate_finding",
         "type": "HIGH_CC_METHOD",
         "severity": "error",
         "location": {
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "lineno": 341,
+          "lineno": 366,
           "name": "_validate_finding",
           "class_name": "LlmSolidAdapter",
           "layer": null,
@@ -10747,7 +10747,7 @@
               "complexity": 21,
               "rank": "D",
               "type": "method",
-              "lineno": 341
+              "lineno": 366
             }
           }
         ],
@@ -12165,12 +12165,12 @@
         "strength": "weak"
       },
       {
-        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::146::_build_prompt_and_options",
+        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::170::_build_prompt_and_options",
         "type": "HIGH_CC_METHOD",
         "severity": "warning",
         "location": {
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "lineno": 146,
+          "lineno": 170,
           "name": "_build_prompt_and_options",
           "class_name": "LlmSolidAdapter",
           "layer": null,
@@ -12194,7 +12194,7 @@
               "complexity": 14,
               "rank": "C",
               "type": "method",
-              "lineno": 146
+              "lineno": 170
             }
           }
         ],
@@ -12741,12 +12741,12 @@
         "strength": "weak"
       },
       {
-        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::422::_parse_response",
+        "id": "HIGH_CC_METHOD::C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py::447::_parse_response",
         "type": "HIGH_CC_METHOD",
         "severity": "warning",
         "location": {
           "filepath": "C:\\pet_projects\\solid_verifier\\solid_dashboard\\llm\\llm_client\\llm_adapter.py",
-          "lineno": 422,
+          "lineno": 447,
           "name": "_parse_response",
           "class_name": "LlmSolidAdapter",
           "layer": null,
@@ -12770,7 +12770,7 @@
               "complexity": 11,
               "rank": "C",
               "type": "method",
-              "lineno": 422
+              "lineno": 447
             }
           }
         ],
@@ -12894,9 +12894,9 @@
     "status": "success",
     "findings": [],
     "metadata": {
-      "candidates_processed": 3,
-      "candidates_skipped": 12,
-      "tokens_used": 16920,
+      "candidates_processed": 15,
+      "candidates_skipped": 0,
+      "tokens_used": 28916,
       "cache_hits": 0,
       "parse_failures": 0,
       "parse_partials": 0,
