@@ -1,0 +1,121 @@
+2026-04-13 16:40:20,346 [WARNING] solid_dashboard.pipeline: Pipeline: package_root 'app' not found under C:\pet_projects\solid_verifier. Falling back to base.
+2026-04-13 16:40:20,346 [INFO] solid_dashboard.pipeline: Pipeline: Starting analysis. Target root set to: C:\pet_projects\solid_verifier
+2026-04-13 16:40:20,346 [INFO] solid_dashboard.pipeline: Running static adapter radon
+2026-04-13 16:40:23,631 [INFO] solid_dashboard.pipeline: Running static adapter cohesion
+2026-04-13 16:40:23,832 [INFO] solid_dashboard.pipeline: Running static adapter import_graph
+2026-04-13 16:40:23,862 [INFO] grimp.adaptors.caching: No cache file: .grimp_cache\solid_verifier.meta.json.
+2026-04-13 16:40:23,863 [INFO] grimp.adaptors.caching: No cache file: .grimp_cache\2696dfdf94ff7b96258fbe975f85295d54403e4e.data.json.
+2026-04-13 16:40:23,927 [INFO] grimp.adaptors.caching: Wrote data cache file .grimp_cache\2696dfdf94ff7b96258fbe975f85295d54403e4e.data.json.
+2026-04-13 16:40:23,929 [INFO] grimp.adaptors.caching: Wrote meta cache file .grimp_cache\solid_verifier.meta.json.
+2026-04-13 16:40:23,934 [INFO] solid_dashboard.pipeline: Running static adapter import_linter
+2026-04-13 16:40:23,935 [INFO] solid_dashboard.pipeline: Running static adapter pyan3
+2026-04-13 16:40:23,936 [WARNING] py.warnings: C:\pet_projects\solid_verifier\solid_dashboard\pipeline.py:59: RuntimeWarning: Pyan3Adapter: target_dir 'C:\pet_projects\solid_verifier' has no __init__.py. Pyan3 will likely use short (unqualified) node names, increasing name collision risk. Consider using a properly packaged Python project as target.
+  result = adapter.run(str(analysis_root), context, config)
+
+2026-04-13 16:40:25,375 [INFO] solid_dashboard.pipeline: Running static adapter heuristics
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: ProjectMap built with 62 classes, 3 interfaces; 15 OCPLSP candidates identified
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: analysis_root=C:\pet_projects\solid_verifier, ignore_dirs=['.git', '.venv', '__pycache__', '.mypy_cache', '.pytest_cache', '.idea', '.vscode', 'tests', 'tools', 'alembic', 'scripts', 'build', 'dist'], input_paths_count=45
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample input_paths=['C:\\pet_projects\\solid_verifier\\run_solid_dashboard.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\config.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\defaults.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\pipeline.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\report_aggregator.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\schema.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\__init__.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\__main__.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\adapters\\class_classifier.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\adapters\\cohesion_adapter.py']
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: ProjectMap classes=62 interfaces=3
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: findings=20 candidates=15
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample classes=['RadonFunctionMetrics', 'MaintainabilityFileMetrics', 'MaintainabilityResult', 'RadonResult', 'CohesionClassMetrics', 'CohesionResult', 'ComplexitySummary', 'MaintainabilitySummary', 'CohesionSummary', 'ImportsSummary', 'DeadCodeSummary', 'AggregatedSummary', 'FileMetrics', 'ClassMetrics', 'FunctionMetrics']
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample candidates=['CohesionAdapter', '_MethodUsageVisitor', 'ImportGraphAdapter', 'RadonAdapter', 'LlmSolidAdapter', 'HeuristicsAdapter', 'ImportLinterAdapter', 'Pyan3Adapter', 'OpenRouterProvider', 'LlmError']
+2026-04-13 16:40:25,746 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: context['heuristics'] prepared with keys=['project_map', 'project_map_summary', 'candidates', 'findings', 'warning']
+2026-04-13 16:40:25,768 [INFO] solid_dashboard.pipeline: Pipeline: aggregated_report built — violations=46, adapters_succeeded=['radon', 'cohesion', 'import_graph', 'pyan3']
+2026-04-13 16:40:25,768 [INFO] solid_dashboard.pipeline: LLM analysis is enabled. Initializing LLM layer...
+2026-04-13 16:40:25,768 [INFO] solid_dashboard.pipeline: Pipeline LLM precheck: heuristics_present=True, project_map_present=True, classes=62, interfaces=3, candidates_present=True, candidates_count=15
+2026-04-13 16:40:25,768 [INFO] solid_dashboard.pipeline: Pipeline LLM candidates sample: ['CohesionAdapter', '_MethodUsageVisitor', 'ImportGraphAdapter', 'RadonAdapter', 'LlmSolidAdapter', 'HeuristicsAdapter', 'ImportLinterAdapter', 'Pyan3Adapter', 'OpenRouterProvider', 'LlmError']
+2026-04-13 16:40:26,635 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouterProvider initialized with endpoint=https://openrouter.ai/api/v1/chat/completions, has_api_key=True
+2026-04-13 16:40:26,648 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=4412385893f331ee864acec25751089e0933efe8f039c98bf78d5af1994ad404
+2026-04-13 16:40:26,649 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:31,726 [WARNING] solid_dashboard.llm.llm_client.gateway: Retryable LLM error on attempt 1/3, retrying in 2.0s: LLM request failed due to network error
+2026-04-13 16:40:33,727 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:33,872 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:33,872 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:33,872 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:33,872 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'CohesionAdapter' (ocp), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:33,899 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=f1aa0ba3b0ce61ead9aa943a16de5f1ae75c391d712882a56e621330bbce1c7c
+2026-04-13 16:40:33,901 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:33,947 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:33,949 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:33,949 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:33,950 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate '_MethodUsageVisitor' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:33,951 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=e02b6f87e4b8393f86acaa98a0a7f38c45d6a2a5bc03f3dda96de5f8d27a2753
+2026-04-13 16:40:33,951 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,009 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,009 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,009 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,009 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'ImportGraphAdapter' (ocp), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,009 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=d1fb87b2afc1c1f9898d8a94534cfc7c7a3823bb2fd49c9a8d874f47dbaf97d8
+2026-04-13 16:40:34,009 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,060 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,060 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,060 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,060 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'RadonAdapter' (ocp), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,060 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=0522f5fdbe0bc0376db828a4f16c3c28c902c4f71994f713d7b86b1bcb048a18
+2026-04-13 16:40:34,060 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,110 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,110 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,125 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,128 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'LlmSolidAdapter' (ocp), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,130 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=67f2e9d363053d419d4a745259f8275879750f59ea9180d423e8361f71162605
+2026-04-13 16:40:34,131 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,178 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,178 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,178 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,178 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'HeuristicsAdapter' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,191 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=6132898b7847902083e3feaf10bd0a39d5e6f421232c3206bc3f082a43aa4232
+2026-04-13 16:40:34,191 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,228 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,228 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,228 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,228 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'ImportLinterAdapter' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,228 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=0a0b802356f58e6a1b5dae2c4403691b9abf8a8734ef2fe07c81801db03ef9d2
+2026-04-13 16:40:34,228 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,271 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,294 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,297 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,327 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'Pyan3Adapter' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,330 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=a3626caba8003860910509ea8cb3022ba57e98d8efe4a18a1632a1aa9d85af01
+2026-04-13 16:40:34,343 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,422 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,434 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,434 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,439 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'OpenRouterProvider' (ocp), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,441 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=6260e4625febc1e1c4c3f767debb6fe9db7d2cf4bf11facd5ca8a963c1f7ebde
+2026-04-13 16:40:34,442 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,480 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,481 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,481 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,481 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'LlmError' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,488 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=41fff480d9dd39d5a192d9da7ede5a6ea8ff7403bfb1f3463f4400c2df4485de
+2026-04-13 16:40:34,488 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,529 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,529 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,529 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,529 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'RetryableError' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,529 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=9b9321f924a57810355b54d5a087793ba3514e1035531353edbfa1f398f71faa
+2026-04-13 16:40:34,529 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,568 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,569 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,570 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,570 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'NonRetryableError' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,572 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=46e56025739ebe34f2366df02e2cf6fa851a71d87854bbd52965682b3e0b4c36
+2026-04-13 16:40:34,572 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,601 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,601 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,601 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,601 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'BudgetExhaustedError' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,610 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=9628cb49f2a1a8050c4ca07a5e062f294df35045467cde6606d2e6b7d77ddf2a
+2026-04-13 16:40:34,612 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,646 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,647 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,648 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,650 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'LlmUnavailableError' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,650 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=6dd030fb7324dfafa3d65073284c9fb8d9e1ab2a76f570e4b148e3190d907606
+2026-04-13 16:40:34,650 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 16:40:34,698 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-04-13 16:40:34,698 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=401, length=64
+2026-04-13 16:40:34,698 [ERROR] solid_dashboard.llm.llm_client.gateway: Non-retryable LLM error: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,698 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: LLM error for candidate 'ClassRole' (both), skipping. NonRetryableError: [status=401] HTTP 401: {"error":{"message":"Missing Authentication header","code":401}}
+2026-04-13 16:40:34,698 [WARNING] solid_dashboard.llm.llm_client.llm_adapter: All LLM candidates failed: 15 skipped out of 15. Check model compatibility or prompt configuration.
