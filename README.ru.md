@@ -33,8 +33,8 @@
 - **LLM-анализ OCP/LSP** (реализован, опционально включается через `solid_config.json`):
   - AST-эвристики выявляют потенциальные нарушения OCP/LSP и формируют список кандидатов.
   - `LlmSolidAdapter` отправляет каждого кандидата на верификацию в LLM (через OpenRouter).
-  - Двухуровневый Anti-Corruption Layer (ACL-A + ACL-B) защищает пайплайн от некорректных ответов модели.
-  - Результаты LLM органично вписываются в единый формат `Finding` рядом со статическими и эвристическими выводами.
+  - Двухуровневый Anti-Corruption Layer (ACL-A + ACL-B) защищает пайплайн от некорректных ответов модели: ACL-B различает статусы `success`, `partial` и `failure` для каждого кандидата, фиксируя `parse_failures`, `parse_partials` и `parse_warnings` в метаданных.
+  - Эвристические сигналы от `HeuristicsAdapter` передаются в промпт LLM через плейсхолдер `{findings}` в `user_base.md`: для каждого кандидата формируется отфильтрованный список сигналов только его класса; при отсутствии сигналов подставляется явный fallback-текст. LLM получает их как вспомогательный контекст и может их оспорить.
 - **Расширяемый пайплайн**: понятный интерфейс `IAnalyzer`, явно реализуемый всеми статическими адаптерами.
 - **Агрегация и дедупликация результатов** через `report_aggregator.py`: результаты всех пяти статических адаптеров нормализуются в единую схему (Pydantic-модели в `schema.py`), обогащаются кросс-адаптерными метриками, дедуплицируются по event-id с повышением severity до максимума и сохраняются в `results["aggregated_report"]` и `context["aggregated_report"]`. Существующие ключи контекста не перезаписываются (backward compatibility). Сбой агрегатора изолирован: пайплайн продолжает работу, возвращая `{"error": ...}` в поле `aggregated_report`.
 - **Машинно-читаемый отчёт** в файле `solid_report.log` (формат JSON) и запланированные визуальные HTML-дашборды.
@@ -151,6 +151,23 @@ OCP-эвристики исключают классы с ролью INFRA_MODEL
 LSP-H-004 детектирует __init__ подкласса без вызова super().__init__(). Исключения: @dataclass-классы, классы из _LSP_H004_EXCLUDED_PARENTS (object, ABC, Protocol, TypedDict, NamedTuple, BaseModel), родители с ролью PURE_INTERFACE (с ограничением: интерфейсы из project_map.interfaces без source_code не верифицируются).
 
 Также в эвристическом слое реализован **multi-signal INFRA-фильтр**: Pydantic/SQLAlchemy/Settings-классы распознаются по набору структурных признаков (декораторы `table_name`/`__tablename__`, базовые классы `Base`/`DeclarativeBase`/ `DeclarativeBaseNoMeta`, `BaseModel`, `BaseSettings`) и получают роль `INFRA_MODEL` или `CONFIG`, после чего полностью исключаются из LSP/OCP-анализа.
+
+**Передача эвристических сигналов в LLM**
+
+После того как `HeuristicsAdapter` формирует `findings` и список `candidates`, `pipeline.py` передаёт оба объекта в `LlmSolidAdapter` через поле `LlmAnalysisInput.heuristic_findings`. Внутри метода `_build_context()` список findings фильтруется по `class_name` текущего кандидата и форматируется в секцию `Static analysis signals:` пользовательского промпта (`user_base.md`):
+
+```text
+Static analysis signals:
+The following signals were detected by automated heuristic analysis for this class.
+Use them as supplementary context — weigh them against the code above and override
+if the evidence does not support them.
+
+- [OCP] Топ-уровневая isinstance-цепочка (rule: OCP-H-001)
+```
+
+Это обеспечивает семантическую преемственность между статическим и LLM-слоями: нейросеть видит те же структурные аномалии, что выявил AST-анализатор, и может либо подтвердить их с объяснением, либо — при недостаточности доказательств в коде — явно не зафиксировать нарушение. Если для класса-кандидата эвристических сигналов не найдено, в промпт подставляется явный fallback: `No static heuristic signals found for this class.`
+
+**Известное ограничение:** суммарный бюджет токенов (`llm.max_tokens_per_run` в `solid_config.json`) должен быть достаточен для обработки всех кандидатов. При его исчерпании оставшиеся кандидаты пропускаются с `BudgetExhaustedError` — пайплайн при этом не прерывается и возвращает частичные результаты на основе статики и эвристик. Рекомендуемый минимум: ~5 000 токенов на кандидата × количество кандидатов.
 
 ### LLM-анализ OCP/LSP: архитектура слоя
 
