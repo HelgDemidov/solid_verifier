@@ -1,0 +1,14 @@
+[importlinter]
+root_packages =
+    app
+
+[importlinter:contract:layers]
+name = Scopus API layered architecture
+type = layers
+containers = app
+layers =
+    routers
+    services
+    infrastructure
+    interfaces
+    models
