@@ -880,3 +880,87 @@ Traceback (most recent call last):
   File "C:\pet_projects\solid_verifier\solid_dashboard\llm\llm_client\gateway.py", line 85, in analyze
     raise BudgetExhaustedError(
 solid_dashboard.llm.errors.BudgetExhaustedError: Token budget exhausted: used 33250 out of 30000 allowed.
+2026-04-13 21:36:07,554 [INFO] solid_dashboard.pipeline: Pipeline: Starting analysis. Target root set to: C:\pet_projects\solid_verifier\solid_dashboard
+2026-04-13 21:36:07,554 [INFO] solid_dashboard.pipeline: Running static adapter radon
+2026-04-13 21:36:10,096 [INFO] solid_dashboard.pipeline: Running static adapter cohesion
+2026-04-13 21:36:10,286 [INFO] solid_dashboard.pipeline: Running static adapter import_graph
+2026-04-13 21:36:10,334 [INFO] grimp.adaptors.caching: Used cache meta file .grimp_cache\solid_dashboard.meta.json.
+2026-04-13 21:36:10,352 [INFO] grimp.adaptors.caching: Used cache data file .grimp_cache\e1ca3e7f42a8a83cd177b033e4fd8084d4abc563.data.json.
+2026-04-13 21:36:10,361 [INFO] grimp.adaptors.caching: Wrote data cache file .grimp_cache\e1ca3e7f42a8a83cd177b033e4fd8084d4abc563.data.json.
+2026-04-13 21:36:10,363 [INFO] grimp.adaptors.caching: Wrote meta cache file .grimp_cache\solid_dashboard.meta.json.
+2026-04-13 21:36:10,370 [INFO] solid_dashboard.pipeline: Running static adapter import_linter
+2026-04-13 21:36:10,897 [INFO] solid_dashboard.pipeline: Running static adapter pyan3
+2026-04-13 21:36:12,082 [INFO] solid_dashboard.pipeline: Running static adapter heuristics
+2026-04-13 21:36:12,614 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: ProjectMap built with 62 classes, 3 interfaces; 15 OCPLSP candidates identified
+2026-04-13 21:36:12,615 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: analysis_root=C:\pet_projects\solid_verifier\solid_dashboard, ignore_dirs=['.git', '.venv', '__pycache__', '.mypy_cache', '.pytest_cache', '.idea', '.vscode', 'tests', 'report', 'build', 'dist', '.solid-cache'], input_paths_count=41
+2026-04-13 21:36:12,616 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample input_paths=['C:\\pet_projects\\solid_verifier\\solid_dashboard\\config.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\defaults.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\pipeline.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\report_aggregator.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\schema.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\__init__.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\__main__.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\adapters\\class_classifier.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\adapters\\cohesion_adapter.py', 'C:\\pet_projects\\solid_verifier\\solid_dashboard\\adapters\\heuristics_adapter.py']
+2026-04-13 21:36:12,617 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: ProjectMap classes=62 interfaces=3
+2026-04-13 21:36:12,617 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: findings=20 candidates=15
+2026-04-13 21:36:12,618 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample classes=['RadonFunctionMetrics', 'MaintainabilityFileMetrics', 'MaintainabilityResult', 'RadonResult', 'CohesionClassMetrics', 'CohesionResult', 'ComplexitySummary', 'MaintainabilitySummary', 'CohesionSummary', 'ImportsSummary', 'DeadCodeSummary', 'AggregatedSummary', 'FileMetrics', 'ClassMetrics', 'FunctionMetrics']
+2026-04-13 21:36:12,618 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: sample candidates=['CohesionAdapter', '_MethodUsageVisitor', 'ImportGraphAdapter', 'RadonAdapter', 'LlmSolidAdapter', 'HeuristicsAdapter', 'ImportLinterAdapter', 'Pyan3Adapter', 'OpenRouterProvider', 'LlmError']
+2026-04-13 21:36:12,619 [INFO] solid_dashboard.adapters.heuristics_adapter: HeuristicsAdapter: context['heuristics'] prepared with keys=['project_map', 'project_map_summary', 'candidates', 'findings', 'warning']
+2026-04-13 21:36:12,638 [INFO] solid_dashboard.pipeline: Pipeline: aggregated_report built — violations=68, adapters_succeeded=['radon', 'cohesion', 'import_graph', 'import_linter', 'pyan3']
+2026-04-13 21:36:12,641 [INFO] solid_dashboard.pipeline: LLM analysis is enabled. Initializing LLM layer...
+2026-04-13 21:36:12,643 [INFO] solid_dashboard.pipeline: Pipeline LLM precheck: heuristics_present=True, project_map_present=True, classes=62, interfaces=3, candidates_present=True, candidates_count=15
+2026-04-13 21:36:12,644 [INFO] solid_dashboard.pipeline: Pipeline LLM candidates sample: ['CohesionAdapter', '_MethodUsageVisitor', 'ImportGraphAdapter', 'RadonAdapter', 'LlmSolidAdapter', 'HeuristicsAdapter', 'ImportLinterAdapter', 'Pyan3Adapter', 'OpenRouterProvider', 'LlmError']
+2026-04-13 21:36:13,472 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouterProvider initialized with endpoint=https://openrouter.ai/api/v1/chat/completions, has_api_key=True
+2026-04-13 21:36:13,500 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=cc601fa7e0ab124a342c9091a210ed4790eaf227ef2444c5f5717a795c614c83
+2026-04-13 21:36:13,500 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:16,015 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:18,135 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=1627
+2026-04-13 21:36:18,135 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=7c4981c13f0ec90a50118ff09bd73e13d63d22f5ba7938b3eeef532a2d0f2bb6
+2026-04-13 21:36:18,135 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:18,587 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:23,753 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=2467
+2026-04-13 21:36:23,764 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=0aac187b0b3eb7639a9ae8973ccdb439df2537d9ef9ebc9296ede4b28ec4095e
+2026-04-13 21:36:23,765 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:24,970 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:29,584 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=2539
+2026-04-13 21:36:29,590 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=d81e24a1c1424955686ec491b4fad813a6ef70f03fc1cb8553349bc967a81011
+2026-04-13 21:36:29,590 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:30,202 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:34,190 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=2139
+2026-04-13 21:36:34,193 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=61bc32cb764265ad16613f1a8b2117bf1fa2d3794ebdc0c3b81dcc44ef9649a0
+2026-04-13 21:36:34,193 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:35,285 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:40,019 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=2306
+2026-04-13 21:36:40,049 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=c6cbaa96c85db8786346bc18b2b70aafaaa81beff90f6d068b8f2a4b1879b10a
+2026-04-13 21:36:40,052 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:41,570 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:41,580 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=833
+2026-04-13 21:36:41,595 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=f5541f6132b57b7e647279b1d13a2b6e55bd601a53dee15a1494eeb4bd79472b
+2026-04-13 21:36:41,595 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:42,813 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:42,980 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=832
+2026-04-13 21:36:43,012 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=5a961905a25f649370e3f1fd4b85fddbc6f9906ffafd390ee2edcdd66a85c081
+2026-04-13 21:36:43,014 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:44,025 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:44,207 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=828
+2026-04-13 21:36:44,211 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=dc5e48dc9fca98b7d3eeb0e23cfe27f8f6bf77f700765cbd68f7820441cd8199
+2026-04-13 21:36:44,212 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:44,900 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:46,699 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=1447
+2026-04-13 21:36:46,734 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=0e909fb02c2f17a721f5a5b5cfc75ea2d7ccab1ad31ee4b6ce415076681c01ed
+2026-04-13 21:36:46,734 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:48,348 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:48,595 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=850
+2026-04-13 21:36:48,626 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=1cb12a8b09169465fc3c289c21248cd73bd5d3a7eeb02ed2bdeec736b3f96268
+2026-04-13 21:36:48,627 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:49,179 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:49,268 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=812
+2026-04-13 21:36:49,278 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=0525e190427365838d0a55bdf90a0b75613c5b5a46003603191658254d4c2872
+2026-04-13 21:36:49,279 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:50,308 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:50,594 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=828
+2026-04-13 21:36:50,609 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=dbc1ecfeab7a35d4c92460d2cd616cf12001447e839e57ae95a17f1d42b47743
+2026-04-13 21:36:50,609 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:53,401 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:53,545 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=867
+2026-04-13 21:36:53,569 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=7b434285e7a9d005a1be956709c92cbe714e6e72dfb075a51e9bdcb5cb118815
+2026-04-13 21:36:53,570 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:54,570 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:54,692 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=828
+2026-04-13 21:36:54,694 [INFO] solid_dashboard.llm.llm_client.gateway: LLM cache miss for key=eb718d129439dd6306ac6f45e1f58d8e7597248a02ebabaac155116a10865e61
+2026-04-13 21:36:54,694 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter request: POST https://openrouter.ai/api/v1/chat/completions
+2026-04-13 21:36:55,625 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-13 21:36:55,725 [INFO] solid_dashboard.llm.llm_client.provider: OpenRouter response: status=200, length=825

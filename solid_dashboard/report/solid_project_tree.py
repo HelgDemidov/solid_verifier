@@ -1,5 +1,4 @@
-# Скрипт для формирования текстовой схемы-лерева директорий проекта
-# Команда для запуска (из tools\solid_verifier): python solid_dashboard\report\solid_project_tree.py
+# Скрипт для формирования текстовой схемы-дерева директорий проекта
 
 from pathlib import Path
 

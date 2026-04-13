@@ -1,5 +1,66 @@
 {
-  "instruction": "Output ONLY a valid JSON object. Do NOT use markdown code fences (```json). Do NOT include any text outside the JSON. The top-level key MUST be 'findings' with an array value. Return {\"findings\": []} if you find no violations.",
+  "instruction": "Output ONLY a valid JSON object. Do NOT use markdown code fences. Do NOT include any text outside the JSON. The ONLY valid top-level key is 'findings'. Its value MUST be a JSON array ([...]), never a dict, never an object keyed by principle name such as {\"OCP\": [...], \"LSP\": [...]}. Return {\"findings\": []} if you find no violations.",
+
+  "json_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["findings"],
+    "additionalProperties": false,
+    "properties": {
+      "findings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["rule", "principle", "file", "class_name", "message", "severity", "details"],
+          "additionalProperties": false,
+          "properties": {
+            "rule":        { "type": "string" },
+            "principle":   { "type": "string", "enum": ["OCP", "LSP"] },
+            "file":        { "type": "string" },
+            "class_name":  { "type": "string" },
+            "message":     { "type": "string" },
+            "severity":    { "type": "string", "enum": ["error", "warning", "info"] },
+            "details":     { "type": "string" },
+            "method_name": { "type": "string" },
+            "suggestion":  { "type": "string" },
+            "heuristic_corroboration": { "type": "boolean" },
+            "analyzed_with": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "common_mistakes": [
+    {
+      "invalid": "{\"findings\": {\"OCP\": [...], \"LSP\": [...]}}",
+      "reason": "findings must be an array, not a dict keyed by principle name"
+    },
+    {
+      "invalid": "{\"findings\": {\"violations\": [...]}}",
+      "reason": "findings must be a flat array, not a nested wrapper object"
+    },
+    {
+      "invalid": "{\"findings\": [], \"summary\": \"...\"}",
+      "reason": "no keys other than 'findings' are allowed at the top level"
+    },
+    {
+      "invalid": "[{\"rule\": \"...\"}]",
+      "reason": "the root value must be an object, not an array"
+    },
+    {
+      "invalid": "{\"findings\": [{\"severity\": \"high\", ...}]}",
+      "reason": "severity must be one of: error, warning, info"
+    },
+    {
+      "invalid": "{\"findings\": [{\"principle\": \"SRP\", ...}]}",
+      "reason": "principle must be exactly OCP or LSP"
+    }
+  ],
+
   "expected_output": {
     "findings": [
       {
@@ -9,7 +70,11 @@
         "class_name": "ClassName",
         "message": "Short, concrete description of the issue.",
         "severity": "warning",
-        "details": "Detailed explanation of why it violates the principle and how it could be refactored."
+        "details": "Detailed explanation of why it violates the principle and how it could be refactored.",
+        "method_name": "process",
+        "suggestion": "Extract each branch into a separate strategy class implementing a common interface.",
+        "heuristic_corroboration": true,
+        "analyzed_with": ["OCP-H-001"]
       }
     ]
   }

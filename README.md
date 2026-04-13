@@ -33,8 +33,8 @@ The tool is project-agnostic: it can be reused across different Python codebases
 - **LLM-based OCP/LSP analysis** (implemented, optionally enabled through `solid_config.json`):
   - AST heuristics identify potential OCP/LSP violations and build a list of candidates.
   - `LlmSolidAdapter` sends each candidate to an LLM for verification (via OpenRouter).
-  - A two-level Anti-Corruption Layer (ACL-A + ACL-B) protects the pipeline from malformed model responses.
-  - LLM results are normalized into the same `Finding` format as static and heuristic results.
+  - A two-level Anti-Corruption Layer (ACL-A + ACL-B) protects the pipeline from malformed model responses: ACL-B distinguishes `success`, `partial`, and `failure` statuses per candidate and records `parse_failures`, `parse_partials`, and `parse_warnings` in run metadata.
+  - Heuristic signals from `HeuristicsAdapter` are forwarded into the LLM prompt via the `{findings}` placeholder in `user_base.md`: for each candidate, only the signals belonging to that specific class are included; when no signals exist for a class, an explicit fallback text is substituted. The LLM receives them as supplementary context and may override them.
 - **Extensible pipeline** through a clear `IAnalyzer` interface explicitly implemented by all static adapters.
 - **Result aggregation and deduplication** via `report_aggregator.py`: results from all five static adapters are normalized into a unified schema (Pydantic models in `schema.py`), enriched with cross-adapter metrics, deduplicated by event ID with severity upgraded to the maximum, and stored in `results["aggregated_report"]` and `context["aggregated_report"]`. Existing context keys are not overwritten (backward compatibility). Aggregator failure is isolated: the pipeline continues and returns `{"error": ...}` in the `aggregated_report` field.
 - **Machine-readable report** in `solid_report.log` (JSON) and planned visual HTML dashboards.
@@ -150,6 +150,25 @@ The updated set of AST heuristics focuses on domain classes and respects the rol
 `LSP-H-004` detects a subclass `__init__` that omits `super().__init__()`. Exceptions: `@dataclass` classes, classes whose parent is in `_LSP_H004_EXCLUDED_PARENTS` (`object`, `ABC`, `Protocol`, `TypedDict`, `NamedTuple`, `BaseModel`), and parents with the `PURE_INTERFACE` role (with the caveat that interfaces from `project_map.interfaces` without `source_code` cannot be fully verified).
 
 The heuristic layer also implements a **multi-signal INFRA filter**: Pydantic/SQLAlchemy/Settings classes are recognized by a set of structural signals (decorators `table_name`/`__tablename__`, base classes `Base`/`DeclarativeBase`/`DeclarativeBaseNoMeta`, `BaseModel`, `BaseSettings`) and are assigned the `INFRA_MODEL` or `CONFIG` role, after which they are fully excluded from LSP/OCP analysis.
+
+The heuristic layer also implements a **multi-signal INFRA filter**: Pydantic/SQLAlchemy/Settings classes are recognized by a set of structural signals (decorators `table_name`/`__tablename__`, base classes `Base`/`DeclarativeBase`/`DeclarativeBaseNoMeta`, `BaseModel`, `BaseSettings`) and are assigned the `INFRA_MODEL` or `CONFIG` role, after which they are fully excluded from LSP/OCP analysis.
+
+**Forwarding heuristic signals to the LLM**
+
+After `HeuristicsAdapter` produces `findings` and the `candidates` list, `pipeline.py` passes both objects into `LlmSolidAdapter` via the `LlmAnalysisInput.heuristic_findings` field. Inside `_build_context()`, the findings list is filtered by the current candidate's `class_name` and formatted into a `Static analysis signals:` section of the user prompt (`user_base.md`):
+
+```text
+Static analysis signals:
+The following signals were detected by automated heuristic analysis for this class.
+Use them as supplementary context — weigh them against the code above and override
+if the evidence does not support them.
+
+- [OCP] Top-level isinstance chain (rule: OCP-H-001)
+```
+
+This creates semantic continuity between the static and LLM layers: the model sees the same structural anomalies that the AST analyzer detected and can either confirm them with an explanation or — when the code evidence is insufficient — explicitly produce no finding. When no heuristic signals are found for a given candidate, the prompt receives an explicit fallback: `No static heuristic signals found for this class.`
+
+**Known limitation:** the total token budget (`llm.max_tokens_per_run` in `solid_config.json`) must be sufficient to process all candidates. When the budget is exhausted, the remaining candidates are skipped with a `BudgetExhaustedError` — the pipeline does not abort and returns partial results based on static analysis and heuristics. Recommended minimum: ~5,000 tokens per candidate × number of candidates.
 
 ### LLM Analysis of OCP/LSP: Layer Architecture
 
