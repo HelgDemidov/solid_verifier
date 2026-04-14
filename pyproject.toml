@@ -4,7 +4,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "solid-verifier"
+name = "solid_verifier"
 version = "0.1.0"
 description = "Config-driven CLI tool for verifying Python projects against SOLID principles and layered architecture"
 readme = "README.md"

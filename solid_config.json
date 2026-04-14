@@ -61,7 +61,7 @@
     "model": "openai/gpt-4o-mini",
     "api_key": null,
     "endpoint": null,
-    "max_tokens_per_run": 100000,
+    "max_tokens_per_run": 70000,
     "cache_dir": ".solid-cache/llm",
     "prompts_dir": "prompts"
   }

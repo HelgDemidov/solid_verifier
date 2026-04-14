@@ -1,5 +1,5 @@
 # Скрипт для формирования текстовой схемы-дерева директорий проекта
-# Запуск из корня репозитория solid-verifier (PowerShell):
+# Запуск из корня репозитория solid_verifier (PowerShell):
 #   python solid_dashboard/report/project_tree/solid_project_tree.py
 
 from pathlib import Path

@@ -97,7 +97,7 @@ def main() -> None:
     # (radon_adapter, pyan3_adapter и будущих) и направляем их в logging-пайплайн
     logging.captureWarnings(True)
 
-    parser = argparse.ArgumentParser(description="SOLID-Verifier Dashboard")
+    parser = argparse.ArgumentParser(description="SOLID Verifier Dashboard")
     parser.add_argument(
         "--target-dir",
         required=True,

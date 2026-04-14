@@ -1,11 +1,11 @@
-# Запуск пайплайна из корня solid-verifier: python run_solid_dashboard.py
+# Запуск пайплайна из корня solid_verifier: python run_solid_dashboard.py
 
 import subprocess
 import sys
 from pathlib import Path
 
 if __name__ == "__main__":
-    # Корень репо solid-verifier — там где лежит этот скрипт
+    # Корень репо solid_verifier — там где лежит этот скрипт
     project_root = Path(__file__).resolve().parent
 
     # target_dir и config — в корне репо

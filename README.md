@@ -6,13 +6,13 @@ Russian version: [README.ru.md](README.ru.md)
 
 The idea for this code analyzer grew out of a paradox of modern AI-assisted development: while building my first educational project, *Scopus Search Code*, the speed of code generation began to outpace my ability to fully understand the growing graph of dependencies inside the project. My analytical background pushed me to regain control over the system as it evolved. I wanted a tool that could solve two problems at once: serve as a strict independent verifier of architectural correctness and also act as a readable map of the hidden connections and dependency paths inside the codebase.
 
-That is how the concept of the SOLID Verifier emerged. For object-oriented Python, SOLID remains one of the most mature and universal frameworks for reasoning about architectural quality. But this choice also has a deeply personal dimension. The inner logic, beauty, and philosophy of SOLID were once explained to me by a close friend — a talented engineer and experienced developer. This project is a tribute to his craft and is dedicated to him.
+That is how the concept of the SOLID Verifier emerged. For object-oriented Python, SOLID remains one of the most mature and universal frameworks for reasoning about architectural quality. 
 
 ***
 
 `solid_dashboard` is a config-driven CLI tool that analyzes Python projects for adherence to SOLID principles and layered architecture. It runs a pipeline of static analyzers, computes metrics, checks architectural contracts, and — optionally — deepens OCP/LSP analysis with an LLM layer. Results from all static adapters are aggregated by `report_aggregator.py` into a single structured report (`aggregated_report`) and written into the machine-readable file `solid_report.log` (JSON format).
 
-The tool is project-agnostic: it can be reused across different Python codebases, not only within the Scopus Search API project.
+The tool is project-agnostic: it can be reused across different Python codebases.
 
 ## Key Features
 
@@ -168,7 +168,7 @@ if the evidence does not support them.
 
 This creates semantic continuity between the static and LLM layers: the model sees the same structural anomalies that the AST analyzer detected and can either confirm them with an explanation or — when the code evidence is insufficient — explicitly produce no finding. When no heuristic signals are found for a given candidate, the prompt receives an explicit fallback: `No static heuristic signals found for this class.`
 
-**Known limitation:** the total token budget (`llm.max_tokens_per_run` in `solid_config.json`) must be sufficient to process all candidates. When the budget is exhausted, the remaining candidates are skipped with a `BudgetExhaustedError` — the pipeline does not abort and returns partial results based on static analysis and heuristics. Recommended minimum: ~5,000 tokens per candidate × number of candidates.
+**Known limitation:** the total token budget (`llm.max_tokens_per_run` in `solid_config.json`) must be sufficient to process all candidates. When the budget is exhausted, the remaining candidates are skipped with a `BudgetExhaustedError` — the pipeline does not abort and returns partial results based on static analysis and heuristics. Recommended minimum: ~10,000 tokens per candidate × number of candidates.
 
 ### LLM Analysis of OCP/LSP: Layer Architecture
 
@@ -293,78 +293,76 @@ The result: static and LLM-based findings live in the same `Finding` list but wi
 
 ***
 
-## Repository Layout
+## Repository Structure
 
-The file structure below reflects the location of SOLID Verifier components and their current names:
+File structure of the project, reflecting the location of SOLID Verifier components and their current naming:
 
 ```text
-scopus_search_code/                           # Root directory of the analyzed project
-├── app/                                      # Main application package (package_root)
-├── tools/                                    # Internal developer tools and scripts
-│   └── solid_verifier/                       # Root directory of the SOLID Verifier tool
-│       ├── prompts/                          # External prompt templates and LLM response schema
-│       │   ├── system.md                     # System prompt (expert role and base rules)
-│       │   ├── user_base.md                  # Base user prompt (source code and context injection)
-│       │   ├── user_ocp_section.md           # OCP-specific instructions for candidate verification
-│       │   ├── user_lsp_section.md           # LSP-specific instructions for candidate verification
-│       │   └── response_schema.json          # Strict JSON contract for model output
-│       ├── tests/                            # Unit and integration tests for the verifier
-│       │   ├── fixtures/                     # Mock data and fake projects (sample_project)
-│       │   ├── static_adapters/              # Tests for all static adapters (Radon, Cohesion, ImportGraph, ImportLinter, Pyan3)
-│       │   │   ├── test_cohesion_adapter/    # Tests for the LCOM4 adapter: computations, ancestor enrichment, classifier
-│       │   │   ├── test_import_graph_adapter/ # Tests for the import graph and Martin stability metrics
-│       │   │   ├── test_import_linter_adapter/ # Tests for layered architecture contract enforcement
-│       │   │   ├── test_pyan3_adapter/       # Tests for call-graph construction and dead code detection
-│       │   │   └── test_radon_adapter/       # Tests for cyclomatic complexity and maintainability metrics
-│       │   └── llm/                          # Unit and E2E tests for LLM integration (Gateway, ACL)
-│       │       └── test_heuristics/          # Unit and E2E test package for SOLID verifier heuristics
-│       ├── solid_dashboard/                  # Main Python package of the tool
-│       │   ├── __main__.py                   # CLI entry point
-│       │   ├── config.py                     # Parsing and validation of solid_config.json
-│       │   ├── pipeline.py                   # Central orchestrator for static adapters and LLM analysis
-│       │   ├── schema.py                     # Data schemas for reports
-│       │   ├── py.typed                      # PEP 561 marker: package ships inline types for static analysers
-│       │   ├── interfaces/                   # Python Abstract Base Classes / Protocols
-│       │   │   └── analyzer.py               # Base IAnalyzer interface
-│       │   ├── adapters/                     # Implementations of static analysis tools
-│       │   │   ├── radon_adapter.py          # radon + lizard (parameters, nesting depth)
-│       │   │   ├── cohesion_adapter.py       # custom LCOM4 (two-pass, ancestor enrichment, ignores @property)
-│       │   │   ├── class_classifier.py       # class role classification (concrete/abstract/interface/dataclass)
-│       │   │   ├── import_graph_adapter.py   # import graph (grimp) + stability metrics
-│       │   │   ├── import_linter_adapter.py  # CLI lint-imports + dynamic contract generation
-│       │   │   ├── pyan3_adapter.py          # call graph & dead code (two-pass, project-agnostic)
-│       │   │   └── heuristics_adapter.py     # unified adapter for the 7 heuristics targeting LSP and OCP
-│       │   │  
-│       │   ├── llm/                          # Isolated LLM analysis and integration layer
-│       │   │   ├── analysis/                 # AST analysis and static heuristics on top of ProjectMap
-│       │   │   │   └── ...                   # Subpackage with ast_parser, heuristics and helper utilities
-│       │   │   ├── llm_client/               # Infrastructure LLM client (gateway, provider, cache, adapter)
-│       │   │   │   └── ...                   # Subpackage for OpenRouter transport, token budget and caching layer
-│       │   │   ├── heuristics/               # Public facade of the heuristics package for external code
-│       │   │   │   └── ...                   # Entry point for running OCP/LSP heuristics from llm.analysis
-│       │   │   ├── errors.py                 # Domain errors of the LLM layer (Retryable/NonRetryable, config validation)
-│       │   │   ├── types.py                  # Domain types of the LLM layer (Finding, LlmCandidate, ParseResult, LlmConfig)
-│       │   │   └── __init__.py               # High-level LLM API exported to the rest of the project
-│       │   └── report/                       # Report generation and processing module
-│       │       ├── templates/                # Jinja2 templates for visual HTML reports
-│       │       ├── differ.py                 # Logic for comparing current report with baseline (in development)
-│       │       └── generator.py              # HTML dashboard rendering from JSON and templates (in development)
-│       ├── .env                              # Local environment variables (OPENROUTER_API_KEY)
-│       ├── .env.example                      # Example environment variables
-│       ├── README.md                         # English documentation (this file)
-│       ├── README.ru.md                      # Russian documentation
-│       ├── pyproject.toml                    # Package metadata and build configuration
-│       ├── pytest.ini                        # Test runner configuration
-│       └── requirements.txt                  # Strict dependencies (radon, lizard, grimp, httpx, etc.)
-├── solid_config.json                         # Single configuration point for SOLID Dashboard (layers, ignore_dirs, LLM)
-└── run_solid_dashboard.py                    # Convenience wrapper script for pipeline execution
+│       solid_verifier/                           # Project root directory
+│       ├── prompts/                              # External prompt templates and LLM response schema
+│       │   ├── system.md                         # System prompt (expert role and base rules)
+│       │   ├── user_base.md                      # Base prompt section (code injection, context and heuristic signals)
+│       │   ├── user_ocp_section.md               # OCP-specific verification instructions
+│       │   ├── user_lsp_section.md               # LSP-specific verification instructions
+│       │   └── response_schema.json              # Strict JSON response contract expected from the model
+│       ├── tests/                                # Unit and integration tests for the verifier
+│       │   ├── fixtures/                         # Mock data and fake projects (sample_project)
+│       │   ├── static_adapters/                  # Tests for all static adapters (Radon, Cohesion, ImportGraph, ImportLinter, Pyan3)
+│       │   │   ├── test_cohesion_adapter/        # LCOM4 adapter tests: computation, ancestor enrichment, classifier
+│       │   │   ├── test_import_graph_adapter/    # Import graph and stability metrics tests
+│       │   │   ├── test_import_linter_adapter/   # Architectural contract verification tests
+│       │   │   ├── test_pyan3_adapter/           # Call-graph construction and dead code detection tests
+│       │   │   └── test_radon_adapter/           # Cyclomatic complexity metrics tests
+│       │   └── llm/                              # Unit and E2E tests for LLM integration (Gateway, ACL)
+│       │       └── test_heuristics/              # Unit and integration test suite for SOLID heuristics
+│       ├── solid_dashboard/                      # Main Python package of the tool
+│       │   ├── __main__.py                       # CLI entry point
+│       │   ├── config.py                         # solid_config.json parsing and validation logic
+│       │   ├── defaults.py                       # Pipeline configuration constants and default values
+│       │   ├── pipeline.py                       # Central orchestrator of static adapters and LLM analysis
+│       │   ├── report_aggregator.py              # Aggregation, deduplication and normalization of all adapter results
+│       │   ├── schema.py                         # Pydantic schemas for the aggregated report
+│       │   ├── py.typed                          # PEP 561 marker: package ships inline types for static analysers
+│       │   ├── interfaces/                       # Abstract base classes / Python protocols
+│       │   │   └── analyzer.py                   # Base IAnalyzer interface
+│       │   ├── adapters/                         # Classic static analysis tool implementations
+│       │   │   ├── radon_adapter.py              # radon + lizard (parameters, nesting)
+│       │   │   ├── cohesion_adapter.py           # Custom LCOM4 (two-pass, ancestor enrichment, ignore @property)
+│       │   │   ├── class_classifier.py           # Semantic class role classification (concrete/abstract/interface/dataclass)
+│       │   │   ├── import_graph_adapter.py       # Import graph (grimp) + stability metrics
+│       │   │   ├── import_linter_adapter.py      # CLI lint-imports + dynamic contract generation
+│       │   │   ├── pyan3_adapter.py              # Call graph and dead code (two-pass, project-agnostic)
+│       │   │   └── heuristics_adapter.py         # Adapter for 7 LSP/OCP heuristics
+│       │   ├── llm/                              # Isolated LLM analysis and integration layer
+│       │   │   ├── analysis/                     # AST analysis: parser and class role classifier (ClassRole)
+│       │   │   ├── heuristics/                   # Public heuristics package facade: 7 independent OCP/LSP modules
+│       │   │   ├── llm_client/                   # LLM infrastructure client (gateway, provider, cache, budget, adapter)
+│       │   │   ├── errors.py                     # LLM layer domain errors (Retryable/NonRetryable, config validation)
+│       │   │   ├── types.py                      # LLM layer domain types (Finding, LlmCandidate, ParseResult, LlmConfig)
+│       │   │   └── __init__.py                   # High-level LLM layer API exports for the rest of the project
+│       │   └── report/                           # Report generation and processing module
+│       │       ├── dashboard/                    # HTML dashboard rendering and comparison tools (differ, generator)
+│       │       ├── pipeline_report/              # Pipeline run logs (solid_debug.log, solid_pipeline_report.log)
+│       │       ├── project_mask/                 # Project mask generator and artifact (skeleton export)
+│       │       ├── project_tree/                 # Project tree generator and text artifact
+│       │       └── templates/                    # Jinja2 templates for the HTML report
+│       ├── .env                                  # Environment secrets (LLM keys; not committed)
+│       ├── .env.example                          # .env template with example environment variables
+│       ├── .gitignore                            # Files and directories excluded from git
+│       ├── .importlinter                         # Base import-linter config (dynamically extended by the adapter)
+│       ├── pyproject.toml                        # Project metadata and build tool configuration
+│       ├── README.md                             # Project documentation (EN)
+│       ├── README.ru.md                          # Project documentation (RU)
+│       ├── requirements.txt                      # Project dependencies list
+│       ├── run_solid_dashboard.py                # Helper script for running the pipeline
+│       └── solid_config.json                     # Main verifier configuration file
 ```
 
 ***
 
 ## Configuration (`solid_config.json`)
 
-`solid_config.json` lives in the **root of the analysed project** (`scopus_search_code/`) and is the **single configuration point** for the entire pipeline. Every adapter — static and LLM — unconditionally respects its rules. Changing any parameter takes effect immediately across the whole pipeline without touching Python code.
+`solid_config.json` lives in the **root of the analysed project** (`solid_verifier/`) and is the **single configuration point** for the entire pipeline. Every adapter — static and LLM — unconditionally respects its rules. Changing any parameter takes effect immediately across the whole pipeline without touching Python code.
 
 ---
 
@@ -372,61 +370,71 @@ scopus_search_code/                           # Root directory of the analyzed p
 
 ```json
 {
-  "package_root": "app",
+  "package_root": "solid_dashboard",
 
   "layers": {
-    "routers":        ["routers"],
-    "services":       ["services"],
-    "infrastructure": ["infrastructure"],
-    "interfaces":     ["interfaces"],
-    "models":         ["models"]
+    "pipeline":      ["pipeline", "report_aggregator", "__main__"],
+    "adapters":      ["adapters"],
+    "interfaces":    ["interfaces"],
+    "llm":           ["llm"],
+    "schema":        ["schema", "defaults", "config"]
   },
 
   "utility_layers": {
-    "core":    ["core"],
-    "schemas": ["schemas"]
+    "report": ["report"]
   },
 
   "layer_order": [
-    "routers",
-    "services",
-    "infrastructure",
+    "pipeline",
+    "adapters",
     "interfaces",
-    "models"
+    "llm",
+    "schema"
   ],
 
-  "interface_layers": ["interfaces"],
+  "interface_layers": [
+    "interfaces"
+  ],
 
   "sdp_tolerance": 0.10,
 
   "allowed_dependency_exceptions": [
     {
-      "source": "models",
-      "target": "db_libs",
-      "reason": "ORM models intentionally inherit SQLAlchemy Base — pending domain/persistence separation"
+      "source": "adapters",
+      "target": "llm",
+      "reason": "Adapters (heuristics_adapter) delegate to LLM subsystem directly — acceptable cross-tier coupling via explicit interface"
     }
   ],
 
   "ignore_dirs": [
     ".git", ".venv", "__pycache__", ".mypy_cache", ".pytest_cache",
-    ".idea", ".vscode", "tests", "tools", "alembic", "scripts",
-    "build", "dist"
+    ".idea", ".vscode", "tests", "report", "build", "dist",
+    ".solid-cache"
   ],
 
   "external_layers": {
-    "db_libs":  ["sqlalchemy"],
-    "web_libs": ["fastapi", "starlette"]
+    "ast_libs":     ["ast", "astroid"],
+    "analysis_libs": ["radon", "lizard"],
+    "graph_libs":   ["pyan3", "networkx"],
+    "linter_libs":  ["grimp"],
+    "llm_libs":     ["openai", "httpx"],
+    "web_libs":     ["fastapi", "starlette"]
+  },
+
+  "pyan3": {
+    "collision_rate_threshold": 0.35,
+    "abort_on_high_collision": false
   },
 
   "llm": {
-    "enabled":            true,
-    "provider":           "openrouter",
-    "model":              "openai/gpt-4o-mini",
-    "api_key":            null,
-    "endpoint":           null,
-    "max_tokens_per_run": 3000,
-    "cache_dir":          ".solid-cache/llm",
-    "prompts_dir":        "tools/solid_verifier/prompts"
+    "enabled": true,
+    "provider": "openrouter",
+    "model": "openai/gpt-4o-mini",
+    "api_key": null,
+    "endpoint": null,
+    "max_tokens_per_run": 70000,
+    "cache_dir": ".solid-cache/llm",
+    "prompts_dir": "prompts"
   }
 }
 ```
@@ -498,10 +506,10 @@ scopus_search_code/                           # Root directory of the analyzed p
 
 ### Preliminary Setup
 
-From the repository root (`scopus_search_code/`) with the virtual environment activated:
+From the repository root (`solid_verifier/`) with the virtual environment activated:
 
 ```bash
-pip install -r tools/solid_verifier/requirements.txt
+pip install -r solid_verifier/requirements.txt
 ```
 
 If LLM analysis is enabled, set the API key environment variable:
@@ -527,7 +535,7 @@ This will:
 1. Load `solid_config.json` from the project root.
 2. Run all static adapters in sequence (Radon, Cohesion, ImportGraph, ImportLinter, Pyan3).
 3. If `llm.enabled: true` and OCP/LSP candidates are found, perform LLM analysis via OpenRouter.
-4. Print a JSON report to stdout and save it into `tools/solid_verifier/solid_dashboard/report/solid_report.log`.
+4. Print a JSON report to stdout and save it into `solid_verifier/solid_dashboard/report/solid_report.log`.
 
 ### 2. Through the wrapper script
 
@@ -539,7 +547,7 @@ The script hardcodes `target_dir = ./app` and `config_path = ./solid_config.json
 
 ### 3. Running tests
 
-From the `tools/solid_verifier/` directory:
+From the directory (`solid_verifier/`):
 
 ```bash
 # All tests except those requiring a real external API
@@ -554,7 +562,7 @@ pytest tests/llm/test_open_router_manual.py -m manual -vv -s
 
 ## Dependencies
 
-The project uses the following main libraries (declared in `tools/solid_verifier/requirements.txt`):
+The project uses the following main libraries (declared in `solid_verifier/requirements.txt`):
 
 - **[radon](https://pypi.org/project/radon/)** (`>=6.0,<7.0`) — cyclomatic complexity and maintainability metrics (MI, Halstead).
 - **[pydantic](https://pypi.org/project/pydantic/)** (`>=2.0,<3.0`) — typing and validation of report data schemas (`RadonResult`, `CohesionResult` in `schema.py`). Used as a contract layer for the future Report Aggregator.
@@ -577,12 +585,12 @@ All dependencies are pinned in `requirements.txt` to stable versions compatible 
 
   - Extend `import_graph_adapter` with layer-level cycle detection and full `evidence` population for SDP/SLP violations based on import traces.
   - Bring the LLM layer to production-ready: stabilize prompts and the JSON response schema, reduce `parse_failures` to zero on typical projects while preserving strict ACL guarantees (no model error should ever break the static report).
-  - Fine-tune handling of infrastructural classes (`Postgres*Repository`, `ScopusHTTPClient`): choose between "LLM-only" analysis and full filtering via an enhanced `ClassRole` (`INFRA_SERVICE` / `INFRA_CLIENT`) so that OCP/LSP checks stay maximally focused on domain layers.
+  - Fine-tune handling of infrastructural classes: choose between "LLM-only" analysis and full filtering via an enhanced `ClassRole` so that OCP/LSP checks stay maximally focused on domain layers.
   - Evolve the visual HTML dashboard (`generator.py`, `differ.py`) with explicit attribution of contributions from the static layer, heuristics and LLM for each finding.
 
 - **Mid-term tasks**
 
-  - Extract SOLID Verifier into a standalone package (`pip install solid-verifier`) while preserving the current adapter and LLM architecture.
+  - Extract SOLID Verifier into a standalone package (`pip install solid_verifier`) while preserving the current adapter and LLM architecture.
   - Integrate with IDEs / VS Code for interactive browsing of LSP/OCP candidates and contextual LLM recommendations directly in the editor.
   - **Switch `pyan3_adapter` to `--dot` mode:** replace the text parser with a Graphviz DOT-format parser.
   - Extend `cohesion_adapter` to correctly account for attributes declared via `__slots__`, `dataclasses.field()`, and Pydantic validators — enabling accurate classification of such classes and eliminating false LCOM4 violations.
